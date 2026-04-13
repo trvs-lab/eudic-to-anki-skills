@@ -1,4 +1,5 @@
 .vercel/
+.DS_Store
 **/__pycache__/
 *.py[cod]
 generated_audio/
