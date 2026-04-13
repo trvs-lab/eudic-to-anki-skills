@@ -1,46 +1,78 @@
-# eudic-to-anki (Agent Skill)
+# eudic-to-anki
 
-Export Eudic cloud study-list words, author **TRVS-Lab** coach JSON (by the agent), generate pronunciation audio (Edge-TTS), and import into Anki via AnkiConnect.
+An open Agent Skill for turning Eudic cloud words into Anki cards end-to-end:
+- export words from Eudic OpenAPI
+- generate TRVS-Lab coach fields by agent
+- attach pronunciation audio (Edge-TTS)
+- import into Anki via AnkiConnect
 
-Format follows the open [Agent Skills](https://agentskills.io/) layout used by Vercel and others.
+This repository follows the [Agent Skills](https://agentskills.io/) format and works with the Vercel skills CLI.
 
-## Install (Vercel / skills CLI)
-
-From [Vercel Agent Skills](https://vercel.com/docs/agent-resources/skills) and [skills.sh](https://skills.sh/docs/cli):
+## Install
 
 ```bash
 npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki
 ```
 
-If this repository ever contains only this one skill, you can omit `--skill`:
+If this repo always contains only this one skill:
 
 ```bash
 npx skills add trvs-lab/eudic-to-anki-skills
 ```
 
-The CLI wires the skill into supported agents (Cursor, Claude Code, Copilot, etc.). After install, open the skill’s `**SKILL.md**` from the path the CLI reports, and run shell/Python commands with **current working directory = that skill folder** (the directory that contains `SKILL.md`).
+## Quick Start
 
-## Layout
+1. Install the skill via `npx skills add ...`.
+2. Open `skills/eudic-to-anki/SKILL.md`.
+3. In your agent, run commands from the skill folder (`skills/eudic-to-anki/`).
+4. Start with:
+   - `bash scripts/check_env.sh`
+
+## What You Get
+
+- **Unified workflow**: export -> coach -> validate -> import -> cleanup
+- **Quality gate**: `validate_trvs_coach_json.py` blocks malformed/garbled JSON
+- **Large batch support**: split/merge and optional subagent base64 decode helper
+- **Model assets bundled**: TRVS-Lab model/templates included
+
+## Requirements
+
+- Python 3
+- `EUDIC_TOKEN` (Eudic OpenAPI token)
+- Anki Desktop + AnkiConnect add-on
+- Optional audio dependency: `pip install edge-tts`
+
+See:
+- `skills/eudic-to-anki/references/openapi.md`
+- `skills/eudic-to-anki/references/anki.md`
+- `skills/eudic-to-anki/references/edge-tts.md`
+
+## Repository Layout
 
 ```
 skills/eudic-to-anki/
-  SKILL.md          # agent instructions (start here)
-  README.md         # human-oriented overview
-  scripts/          # export, validate, merge, import, TTS
-  references/       # token, Anki, Edge-TTS, coach prompt
-  assets/           # TRVS-Lab note type templates
-  workflows/        # playbooks (yesterday / range / word list)
-  import_scratch/     # intermediates (gitignored contents)
+  SKILL.md            # agent instructions (entrypoint)
+  README.md           # skill overview
+  scripts/            # export, validate, merge, import, TTS
+  references/         # token / Anki / Edge-TTS / coach prompt
+  assets/             # TRVS-Lab note-type templates
+  workflows/          # yesterday / date-range / word-list playbooks
+  import_scratch/     # intermediate artifacts (gitignored contents)
 ```
 
-## Open source checklist
+## Typical Commands
 
-1. Push this repo to GitHub: `trvs-lab/eudic-to-anki-skills`.
-2. Choose a license (this repo includes `LICENSE` as MIT; change if you prefer another).
-3. Optionally list the skill on the community directory: [skills.sh](https://skills.sh/) (see their submission process).
+```bash
+# env check
+bash scripts/check_env.sh
 
-## Requirements (runtime)
+# eudic categories
+python3 scripts/eudic_export.py --list-categories
 
-- Python 3, `EUDIC_TOKEN` (Eudic OpenAPI), Anki + AnkiConnect, optional `pip install edge-tts` for default audio.
+# anki connectivity
+python3 scripts/ankiconnect_import.py --ping
+```
 
-See `skills/eudic-to-anki/SKILL.md` and `skills/eudic-to-anki/references/` for details.
+## License
+
+MIT. See `LICENSE`.
