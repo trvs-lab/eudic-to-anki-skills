@@ -1,0 +1,30 @@
+name: Validate Skills CLI Discovery
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run skills list
+        run: |
+          npx --yes skills list . > /tmp/skills-list.txt
+          cat /tmp/skills-list.txt
+
+      - name: Assert expected skill is discoverable
+        run: |
+          grep -q "eudic-to-anki" /tmp/skills-list.txt || {
+            echo "Expected skill 'eudic-to-anki' was not found in skills list output."
+            exit 1
+          }
