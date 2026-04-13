@@ -1,7 +1,5 @@
 # eudic-to-anki
 
-统一后的单一 skill。用户和 agent 只需要从这里进入，不再跨多个 skill 来回跳读。
-
 ## 安装（Vercel skills CLI）
 
 本仓库符合 [Agent Skills](https://agentskills.io/) 与 [Vercel Agent Skills](https://vercel.com/docs/agent-resources/skills) 约定的 `skills/<skill-name>/` 布局。发布到 GitHub 后，他人可执行：
@@ -30,7 +28,3 @@ npx skills add <owner>/<repo> --skill eudic-to-anki
 - Anki 连通性：`python3 scripts/ankiconnect_import.py --ping`
 - 音频试跑：`python3 scripts/edge_tts_runner.py --text "semantic" --output /tmp/semantic.mp3`
 - 大批量 base64 解码：`python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o import_scratch/coach_batch_01.json`
-
-## 现状说明
-
-导出、导入、TTS、模型资产与参考文档都已迁入本 skill，旧目录已移除。
