@@ -1,8 +1,7 @@
 ---
-
-## name: eudic-to-anki
-
+name: eudic-to-anki
 description: Unified Eudic to Anki pipeline skill. Agent-only entry for export, coach authoring, audio, and Anki import. Trigger e.g. 把昨天的生词导入 anki / eudic words to Anki / eudic-to-anki.
+---
 
 # Eudic Anki Pipeline (Unified Skill)
 
