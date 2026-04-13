@@ -19,6 +19,11 @@ REPLACEMENT = "\ufffd"
 # CJK + common extension blocks; root with morphological "+" must include a Chinese gloss (skill rule).
 _CJK_RE = re.compile(r"[\u3007\u3400-\u4dbf\u4e00-\u9fff\U00020000-\U0002ceaf\U00030000-\U000323af]")
 _MOJIBAKE_MARKERS = ("Ã", "Â", "Ð", "Ñ")
+_ROOT_SEGMENT_RE = re.compile(r"^[^+（）()]{1,40}（[^（）]{1,20}）$")
+_ROOT_BANNED_EN_RE = re.compile(
+    r"\b(past\s*participle|participle|suffix|prefix|form|tense|with\s*-?ed)\b",
+    re.I,
+)
 REQUIRED_KEYS = (
     "word",
     "pronunciation",
@@ -33,6 +38,46 @@ REQUIRED_KEYS = (
 
 def _has_replacement(s: str) -> bool:
     return REPLACEMENT in s
+
+
+def _validate_root_value(root_val: str, word: str, index: int) -> list[str]:
+    errs: list[str] = []
+    rs = root_val.strip()
+    if not rs:
+        errs.append(
+            f"note[{index}] word={word!r}: root must not be empty (use '-' if unsplittable)"
+        )
+        return errs
+    if rs == "-":
+        return errs
+
+    if "(" in rs or ")" in rs:
+        errs.append(
+            f"note[{index}] word={word!r}: root must use full-width Chinese parentheses （）, not ()"
+        )
+    if _ROOT_BANNED_EN_RE.search(rs):
+        errs.append(
+            f"note[{index}] word={word!r}: root looks like English grammar explanation; "
+            f"use 形式（中文义） segments (got {root_val!r})"
+        )
+    if _CJK_RE.search(rs) is None:
+        errs.append(
+            f"note[{index}] word={word!r}: root must contain Chinese glosses (got {root_val!r})"
+        )
+
+    parts = [p.strip() for p in rs.split("+")]
+    if any(not p for p in parts):
+        errs.append(
+            f"note[{index}] word={word!r}: root has empty segment around '+' (got {root_val!r})"
+        )
+        return errs
+
+    for p in parts:
+        if not _ROOT_SEGMENT_RE.match(p):
+            errs.append(
+                f"note[{index}] word={word!r}: invalid root segment {p!r}; expected 形式（中文义）"
+            )
+    return errs
 
 
 def _check_note(note: dict[str, Any], index: int, require_ipa_slashes: bool) -> list[str]:
@@ -131,12 +176,7 @@ def _check_note(note: dict[str, Any], index: int, require_ipa_slashes: bool) -> 
 
     root_val = note.get("root", "")
     if isinstance(root_val, str):
-        rs = root_val.strip()
-        if rs and rs != "-" and "+" in rs and _CJK_RE.search(rs) is None:
-            errs.append(
-                f"note[{index}] word={w!r}: root uses '+' but has no Chinese gloss—use "
-                f"「形式（中文义）」 per word-coach-json-prompt.md (got {root_val!r})"
-            )
+        errs.extend(_validate_root_value(root_val, w, index))
 
     return errs
 

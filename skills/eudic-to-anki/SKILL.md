@@ -56,6 +56,7 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 - If subagent output is base64, decode via:
   - `python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o import_scratch/coach_batch_01.json`
 - Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types).
+- If validation fails (especially `root` format), regenerate only the failed batch/words and re-run validator before merge/import.
 
 ## Playbooks
 
