@@ -1,0 +1,26 @@
+<!-- 正面区块 -->
+<div class="section top">
+<div id="front" class="items">
+  <span id="word" class="block">{{单词}}</span>
+  <span class="audio block">{{发音}}</span>
+</div>
+<div id="instance" class="items">{{例句}}</div>
+</div>
+
+<script>
+var wordText = document.querySelector("#word").innerText.trim();
+var instance = document.querySelector("#instance");
+
+if (instance.innerHTML.trim() === '') {
+  instance.classList.add("hide");
+} else {
+  var escapedWordText = wordText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var regex = new RegExp(`\\b${escapedWordText}\\b`, "gi");
+  instance.innerHTML = instance.innerHTML.replace(regex, function(matchedWord) {
+    if (matchedWord.startsWith('<b><u>') && matchedWord.endsWith('</u></b>')) {
+      return matchedWord;
+    }
+    return `<b><u>${matchedWord}</u></b>`;
+  });
+}
+</script>

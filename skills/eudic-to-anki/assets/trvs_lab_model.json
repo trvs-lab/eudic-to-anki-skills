@@ -1,0 +1,21 @@
+{
+  "model_name": "TRVS-Lab",
+  "fields": [
+    "单词",
+    "音标",
+    "释义",
+    "英英",
+    "词根",
+    "例句",
+    "常用搭配",
+    "发音"
+  ],
+  "card_templates": [
+    {
+      "Name": "Card 1",
+      "FrontPath": "trvs_lab_front.html",
+      "BackPath": "trvs_lab_back.html"
+    }
+  ],
+  "css_path": "trvs_lab_styling.css"
+}

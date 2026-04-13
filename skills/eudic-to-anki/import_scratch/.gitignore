@@ -1,0 +1,4 @@
+# Only scaffold is tracked; batch CSV/JSON here must never be committed.
+*
+!.gitignore
+!.gitkeep

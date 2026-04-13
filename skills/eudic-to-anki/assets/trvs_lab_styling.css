@@ -1,0 +1,98 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body,
+html {
+  font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
+  line-height: 1.3;
+  font-size: 20px;
+  background-color: #f0f0f0;
+  color: #333333;
+}
+
+b {
+  color: #007bff;
+}
+
+.section {
+  border-radius: 13px;
+  background-color: #ffffff;
+  margin: 10px 2px;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.15);
+  color: #333333;
+  text-align: left;
+}
+
+.items + .items {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.items {
+  margin: 0 14px;
+  padding: 10px 0 8px 0;
+}
+
+#front {
+  border-top: 0;
+  font-size: 24px;
+  font-family: courier;
+  line-height: 1;
+  font-weight: bolder;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+.block {
+  display: inline-block;
+}
+
+.audio {
+  position: absolute;
+  width: 50%;
+  opacity: 0;
+}
+
+.soundLink {
+  width: 100%;
+}
+
+.hide {
+  display: none;
+}
+
+.phenic {
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 19px;
+}
+
+#instance {
+  white-space: pre-wrap;
+}
+
+#instance u {
+  color: #008080;
+  text-decoration: none;
+}
+
+@keyframes bounceInUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 100px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.bounceInUp {
+  margin-top: 12px;
+  animation: bounceInUp 0.3s cubic-bezier(.39, -0.35, .23, 1.51);
+}

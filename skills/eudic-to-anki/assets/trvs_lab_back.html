@@ -1,0 +1,57 @@
+<!-- 背面区块 -->
+{{FrontSide}}
+<div class="section bounceInUp">
+<div class="items phenic">{{音标}}</div>
+<div class="items meaning-row"><span class="type">{{释义}}</span></div>
+{{#词根}}
+  <div class="items root-field">{{词根}}</div>
+{{/词根}}
+<div class="items">{{英英}}</div>
+<div class="items">{{常用搭配}}</div>
+</div>
+
+<script type="text/javascript">
+var colorMap = {
+    'n.':'#86c440',
+    'a.':'#f8b002',
+    'adj.':'#727272',
+    'ad.':'#684b9d',
+    'adv.':'#684b9d',
+    'v.':'#479cdf',
+    'vi.':'#3e480d',
+    'vt.':'#3e480d',
+    'prep.':'#04B7C9',
+    'conj.':'#04B7C9',
+    'pron.':'#04B7C9',
+    'art.':'#04B7C9',
+    'num.':'#04B7C9',
+    'int.':'#04B7C9',
+    'interj.':'#04B7C9',
+    'modal.':'#04B7C9',
+    'aux.':'#04B7C9',
+    'pl.':'#D111D3',
+    'abbr.':'#D111D3',
+    'na.':'#04B7C9',
+  };
+  [].forEach.call(document.querySelectorAll('.type'), function(div) {
+  div.innerHTML = div.innerHTML.replace(/\b[a-z]+\./g, function(symbol) {
+    if(colorMap[symbol]) {
+      return '<a style="font-family:Georgia;font-style:italic;font-weight:bold;color:' + colorMap[symbol] + ';border-radius:4px;padding:0 3px;margin-right:2px;">'+
+      symbol + '</a>';
+    } else {
+      return symbol;
+    }
+  });
+ });
+
+  (function() {
+    var rootDiv = document.querySelector('.root-field');
+    if (rootDiv) {
+      var value = rootDiv.textContent.trim();
+      if (value === '-' || value === '无') {
+        rootDiv.style.display = 'none';
+      }
+    }
+  })();
+
+</script>

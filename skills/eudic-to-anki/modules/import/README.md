@@ -1,0 +1,23 @@
+# Import Module
+
+负责 AnkiConnect 导入、deck/model 选择、可选 upsert 刷新策略。
+
+## 前置
+
+- Anki Desktop 已启动
+- AnkiConnect 可访问（`http://127.0.0.1:8765`）
+
+## 命令
+
+- 连通性：`python3 scripts/ankiconnect_import.py --ping`
+- 基础导入：`python3 scripts/ankiconnect_import.py --input import_scratch/import.json --deck words --create-deck`
+- 刷新已存在卡片：在导入命令加 `--dia-upsert`
+
+## 输出
+
+- 导入/更新/跳过统计
+- deck / model 使用情况
+
+## 参考
+
+- `references/anki.md`
