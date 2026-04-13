@@ -1,0 +1,61 @@
+name: Validate Skill Frontmatter
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate skills/*/SKILL.md frontmatter
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          def fail(msg: str) -> None:
+              print(f"ERROR: {msg}", file=sys.stderr)
+              raise SystemExit(1)
+
+          skill_files = sorted(Path("skills").glob("*/SKILL.md"))
+          if not skill_files:
+              fail("No skills/*/SKILL.md files found")
+
+          for path in skill_files:
+              text = path.read_text(encoding="utf-8")
+              if not text.startswith("---\n"):
+                  fail(f"{path}: missing YAML frontmatter start")
+              parts = text.split("---\n", 2)
+              if len(parts) < 3:
+                  fail(f"{path}: malformed YAML frontmatter delimiters")
+              header = parts[1]
+              body = parts[2]
+              if not body.strip():
+                  fail(f"{path}: missing body after frontmatter")
+              kv = {}
+              for line in header.splitlines():
+                  s = line.strip()
+                  if not s or s.startswith("#"):
+                      continue
+                  if ":" not in s:
+                      fail(f"{path}: invalid frontmatter line: {line!r}")
+                  k, v = s.split(":", 1)
+                  kv[k.strip()] = v.strip()
+              for required in ("name", "description"):
+                  if required not in kv or not kv[required]:
+                      fail(f"{path}: missing required frontmatter field '{required}'")
+              if kv["name"] != path.parent.name:
+                  fail(f"{path}: frontmatter name '{kv['name']}' must match directory '{path.parent.name}'")
+
+          print(f"Validated {len(skill_files)} skill file(s).")
+          PY
