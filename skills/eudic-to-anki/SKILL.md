@@ -67,7 +67,6 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 
 ## Safety
 
-- Human setup (EUDIC_TOKEN, AnkiConnect, optional screenshots): `README.md` → **§ Human setup**.
 - Never store token values in tracked files.
 - Prefer `EUDIC_TOKEN` from environment.
 - If AnkiConnect is unavailable, stop and provide setup guidance.

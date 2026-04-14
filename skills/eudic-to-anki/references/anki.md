@@ -1,7 +1,8 @@
 # Anki + AnkiConnect
 
-- 安装并启动 Anki Desktop。
-- 安装 AnkiConnect（代码 `2055492159`）。
+- 在 [Anki 官网](https://apps.ankiweb.net/#downloads)下载并安装并启动 Anki 客户端。
+- 在客户端登录 Anki 账号，如果没有账号则在 [Anki Web](https://ankiweb.net/account/signup) 注册一个
+- 安装 AnkiConnect 插件: 在 Anki 客户端依次点击「工具」->「插件」->「获取插件」，输入插件代`2055492159` 安装。
 - 连通性检查：
 
 ```bash

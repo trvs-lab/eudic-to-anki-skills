@@ -1,10 +1,13 @@
 # eudic-to-anki
 
-An open Agent Skill for turning Eudic cloud words into Anki cards end-to-end:
-- export words from Eudic OpenAPI
-- generate TRVS-Lab coach fields by agent
-- attach pronunciation audio (Edge-TTS)
-- import into Anki via AnkiConnect
+**English** | [中文](README.zh-CN.md)
+
+An open Agent Skill that exports words from the Eudic dictionary and turns them into study cards, then imports them into Anki automatically:
+
+- Export words via the Eudic OpenAPI
+- Have an Agent build Anki flashcard content
+- Generate pronunciation with Edge-TTS
+- Import into Anki through AnkiConnect
 
 This repository follows the [Agent Skills](https://agentskills.io/) format and works with the Vercel skills CLI.
 
@@ -16,31 +19,23 @@ npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 
 ## Quick Start
 
-1. Install the skill via `npx skills add ...`.
+1. Install the skill with `npx skills add ...`.
 2. Open `skills/eudic-to-anki/SKILL.md`.
-3. In your agent, run commands from the skill folder (`skills/eudic-to-anki/`).
+3. In your agent, run the documented commands with the skill directory (`skills/eudic-to-anki/`) as the working directory.
 4. Start with:
    - `bash scripts/check_env.sh`
 
 ## What You Get
 
-- **Unified workflow**: export -> coach -> validate -> import -> cleanup
-- **Quality gate**: `validate_trvs_coach_json.py` blocks malformed/garbled JSON
-- **Post-import sync**: `ankiconnect_import.py` runs AnkiConnect `sync` after a successful import by default (`--no-sync` to skip)
-- **Large batch support**: split/merge and optional subagent base64 decode helper
-- **Model assets bundled**: TRVS-Lab model/templates included
+- **Unified workflow**: export → build cards → validate → import → cleanup
+- **Quality gate**: generated cards are checked automatically against the expected format
+- **Post-import sync**: after a successful import into Anki, changes sync to the cloud by default
+- **Templates included**: TRVS-Lab note type and related assets ship with the skill
 
-## Requirements
+## What You Need to Configure
 
-- Python 3
-- `EUDIC_TOKEN` (Eudic OpenAPI token)
-- Anki Desktop + AnkiConnect add-on
-- Optional audio dependency: `pip install edge-tts`
-
-See:
-- `skills/eudic-to-anki/references/openapi.md`
-- `skills/eudic-to-anki/references/anki.md`
-- `skills/eudic-to-anki/references/edge-tts.md`
+- **Eudic `EUDIC_TOKEN`**: follow [skills/eudic-to-anki/references/openapi.md](skills/eudic-to-anki/references/openapi.md)
+- **Anki Desktop + AnkiConnect**: follow [skills/eudic-to-anki/references/anki.md](skills/eudic-to-anki/references/anki.md)
 
 ## Repository Layout
 
@@ -58,13 +53,13 @@ skills/eudic-to-anki/
 ## Typical Commands
 
 ```bash
-# env check
+# environment check
 bash scripts/check_env.sh
 
-# eudic categories
+# Eudic categories
 python3 scripts/eudic_export.py --list-categories
 
-# anki connectivity
+# Anki connectivity
 python3 scripts/ankiconnect_import.py --ping
 ```
 
