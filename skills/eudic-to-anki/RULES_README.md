@@ -1,59 +1,56 @@
-# Eudic-to-Anki Rules Playbook (Single-File)
+# eudic-to-anki Rules README (Single File, Actually Usable)
 
-This guide tells an agent to generate one working Codex rules file for
-`eudic-to-anki` automation:
+This README is for agents.
+
+Generate exactly one rules file:
 
 - `~/.codex/rules/eudic-to-anki.rules`
 
 Do not split into multiple rule files.
 
-## Objective
+## Why network blocks can still happen
 
-The single rules file must cover both command shapes:
+Even when rules exist, export may still be blocked if command shape does not match `prefix_rule`.
 
-- Relative script execution (for example: `python3 scripts/eudic_export.py ...`)
-- Absolute installed-skill execution (for example: `python3 <SKILL_ROOT>/scripts/eudic_export.py ...`)
+Most common mismatch causes:
 
-If only one shape is covered, automation may still fail in sandbox mode.
+1. Environment-variable prefix before command, for example:
+  - `EUDIC_TO_ANKI_TEMP_DIR=... python3 ...`
+2. Shell wrapper command, for example:
+  - `/bin/zsh -lc 'python3 ...'`
 
-## Key Rules Facts
+Use direct command invocation instead.
 
-- `pattern` uses exact command-prefix matching.
-- `match` entries are inline tests for verification.
-- Do not rely on wildcard path expansion in `pattern`.
-- Restart Codex after editing rules so changes are loaded.
+## Hard requirements for generated rules
 
-Reference: [Codex Rules](https://developers.openai.com/codex/rules)
+The single file must cover both execution shapes:
 
-## Required Output File
+1. Relative script paths (skill root cwd), for example:
+  - `python3 scripts/eudic_export.py ...`
+2. Absolute installed-skill paths (automation cwd may differ), for example:
+  - `python3 <SKILL_ROOT>/scripts/eudic_export.py ...`
 
-- `~/.codex/rules/eudic-to-anki.rules`
+Command families to include:
 
-This file should include:
-
-- Relative-path rules for skill-root execution.
-- Absolute-path rules based on discovered local install path.
-
-## Command Families To Cover
-
-- `python3 scripts/eudic_export.py`
-- `python3 scripts/run_with_login_zsh.py python3 scripts/eudic_export.py`
-- `python3 scripts/ankiconnect_import.py`
-- `bash scripts/check_env.sh`
-- `bash scripts/cleanup_import_artifacts.sh`
+- `eudic_export.py`
+- `run_with_login_zsh.py ... eudic_export.py`
+- `ankiconnect_import.py`
+- `edge_tts_runner.py` (direct probe/generation)
+- `say` (offline fallback probe)
+- `check_env.sh`
+- `cleanup_import_artifacts.sh`
 - `open -a Anki`
 
-Plus the same families with absolute scripts under discovered `<SKILL_ROOT>`.
+## How to discover `<SKILL_ROOT>` safely
 
-## Discover `<SKILL_ROOT>` (No Hardcoded User Path)
-
-Use discovery commands with `$HOME`:
+Do not hardcode personal paths in docs/templates.
+Discover at runtime:
 
 ```bash
 find "$HOME/.agents/skills" -maxdepth 3 -type f -name SKILL.md | rg '/eudic-to-anki/SKILL.md$'
 ```
 
-If found at `<SKILL_ROOT>/SKILL.md`, derive absolute script paths:
+If found at `<SKILL_ROOT>/SKILL.md`, then use:
 
 - `<SKILL_ROOT>/scripts/eudic_export.py`
 - `<SKILL_ROOT>/scripts/run_with_login_zsh.py`
@@ -61,38 +58,34 @@ If found at `<SKILL_ROOT>/SKILL.md`, derive absolute script paths:
 - `<SKILL_ROOT>/scripts/check_env.sh`
 - `<SKILL_ROOT>/scripts/cleanup_import_artifacts.sh`
 
-## Authoring Rules In One File
+## Validation (must pass)
 
-In `~/.codex/rules/eudic-to-anki.rules`, include both:
-
-1. Relative rules (for agent runs inside skill root).
-2. Absolute rules (for automations invoking installed scripts by full path).
-
-Use date-agnostic examples in `match`; do not lock examples to a fixed day.
-
-## Validation Workflow (Mandatory)
-
-Run `execpolicy check` against the same single file:
+Validate against the same single file:
 
 ```bash
 codex execpolicy check --pretty --rules "$HOME/.codex/rules/eudic-to-anki.rules" -- python3 scripts/eudic_export.py --all-categories --start-date 2026-05-01 --end-date 2026-05-01 --format csv --output /tmp/eudic-export.csv
 codex execpolicy check --pretty --rules "$HOME/.codex/rules/eudic-to-anki.rules" -- python3 <SKILL_ROOT>/scripts/eudic_export.py --all-categories --start-date 2026-05-01 --end-date 2026-05-01 --format csv --output /tmp/eudic-export.csv
 codex execpolicy check --pretty --rules "$HOME/.codex/rules/eudic-to-anki.rules" -- python3 <SKILL_ROOT>/scripts/ankiconnect_import.py --ping
+codex execpolicy check --pretty --rules "$HOME/.codex/rules/eudic-to-anki.rules" -- python3 <SKILL_ROOT>/scripts/edge_tts_runner.py --text test --output /tmp/test.mp3
+codex execpolicy check --pretty --rules "$HOME/.codex/rules/eudic-to-anki.rules" -- say test
 codex execpolicy check --pretty --rules "$HOME/.codex/rules/eudic-to-anki.rules" -- bash <SKILL_ROOT>/scripts/cleanup_import_artifacts.sh
 ```
 
-All checks must return `decision: allow`.
+Expected result for each command: `decision: allow`.
 
-## Anti-Leak Requirement
+## Agent do/don't checklist
 
-When writing docs or templates, never include personal paths like `/Users/<name>`.
-Only use placeholders such as `<SKILL_ROOT>` and shell variables such as `$HOME`.
+Do:
 
-## Completion Contract
+- Generate one file at `~/.codex/rules/eudic-to-anki.rules`.
+- Include both relative and absolute command-prefix rules.
+- Keep `match` examples date-agnostic.
+- Restart Codex after rule changes.
 
-When finished, the agent should report:
+Don't:
 
-1. Final file path: `~/.codex/rules/eudic-to-anki.rules`
-2. Discovered `<SKILL_ROOT>` used for absolute-path rules
-3. The exact `execpolicy check` commands executed
-4. Which command families are confirmed `allow`
+- Do not run export/import as `FOO=bar python3 ...` in automation.
+- Do not wrap export/import in `/bin/zsh -lc '...'`.
+- Do not claim rules are valid without `execpolicy check`.
+- Do not conclude "Edge-TTS network broken" from a sandboxed probe command that did not match rules.
+
