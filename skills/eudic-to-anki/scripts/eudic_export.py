@@ -13,7 +13,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -33,6 +33,71 @@ class Category:
     id: str
     language: str
     name: str
+
+
+def _timezone_candidates_from_system() -> list[str]:
+    candidates: list[str] = []
+
+    env_tz = os.getenv("TZ", "").strip()
+    if env_tz:
+        candidates.append(env_tz)
+
+    etc_timezone = Path("/etc/timezone")
+    if etc_timezone.exists():
+        try:
+            text = etc_timezone.read_text(encoding="utf-8").strip()
+        except OSError:
+            text = ""
+        if text:
+            candidates.append(text)
+
+    localtime = Path("/etc/localtime")
+    if localtime.is_symlink():
+        try:
+            resolved = localtime.resolve()
+        except OSError:
+            resolved = None
+        if resolved is not None:
+            parts = resolved.parts
+            if "zoneinfo" in parts:
+                idx = parts.index("zoneinfo")
+                candidate = "/".join(parts[idx + 1 :]).strip()
+                if candidate:
+                    candidates.append(candidate)
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for candidate in candidates:
+        if candidate not in seen:
+            seen.add(candidate)
+            ordered.append(candidate)
+    return ordered
+
+
+def resolve_timezone(requested_name: str | None) -> tuple[tzinfo, str]:
+    if requested_name:
+        try:
+            return ZoneInfo(requested_name), requested_name
+        except ZoneInfoNotFoundError as exc:
+            raise ApiError(f"Unknown timezone: {requested_name}") from exc
+
+    for candidate in _timezone_candidates_from_system():
+        try:
+            return ZoneInfo(candidate), candidate
+        except ZoneInfoNotFoundError:
+            continue
+
+    local_tz = datetime.now().astimezone().tzinfo
+    if local_tz is None:
+        raise ApiError("Could not determine system timezone. Pass --timezone explicitly.")
+
+    fallback_name = (
+        getattr(local_tz, "key", None)
+        or getattr(local_tz, "zone", None)
+        or datetime.now().astimezone().tzname()
+        or "local"
+    )
+    return local_tz, fallback_name
 
 
 def parse_args() -> argparse.Namespace:
@@ -80,8 +145,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--timezone",
-        default="Asia/Shanghai",
-        help="IANA timezone used for date filtering and local timestamps. Default: Asia/Shanghai",
+        help=(
+            "IANA timezone used for date filtering and local timestamps. "
+            "Default: system local timezone"
+        ),
     )
     parser.add_argument(
         "--format",
@@ -247,7 +314,7 @@ def fetch_all_words(
     return []
 
 
-def parse_date(date_text: str | None, tz: ZoneInfo, is_end: bool) -> datetime | None:
+def parse_date(date_text: str | None, tz: tzinfo, is_end: bool) -> datetime | None:
     if not date_text:
         return None
     try:
@@ -267,7 +334,7 @@ def filter_records(
     *,
     start_at: datetime | None,
     end_before: datetime | None,
-    tz: ZoneInfo,
+    tz: tzinfo,
     category: Category,
 ) -> list[dict[str, Any]]:
     filtered: list[dict[str, Any]] = []
@@ -384,10 +451,7 @@ def print_categories(categories: list[Category]) -> None:
 def main() -> int:
     try:
         args = parse_args()
-        try:
-            tz = ZoneInfo(args.timezone)
-        except ZoneInfoNotFoundError as exc:
-            raise ApiError(f"Unknown timezone: {args.timezone}") from exc
+        tz, timezone_name = resolve_timezone(args.timezone)
 
         auth_header = get_auth_header(args.token)
         categories = list_categories(args.language, auth_header)
@@ -442,7 +506,7 @@ def main() -> int:
                 rows,
                 meta={
                     "language": args.language,
-                    "timezone": args.timezone,
+                    "timezone": timezone_name,
                     "start_date": args.start_date,
                     "end_date": args.end_date,
                     "category_ids": [item.id for item in selected],
