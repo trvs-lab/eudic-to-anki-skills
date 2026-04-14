@@ -10,7 +10,7 @@ Typical transcript location (machine-specific):
 
 Usage (from repo .agents/skills):
   python3 eudic-to-anki/scripts/decode_subagent_transcript_b64.py \\
-    /path/to/subagent.jsonl -o eudic-to-anki/import_scratch/coach_batch_01.json
+    /path/to/subagent.jsonl -o ~/Documents/eudic-to-anki-temp/coach_batch_01.json
 """
 
 from __future__ import annotations

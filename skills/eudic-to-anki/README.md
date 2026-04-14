@@ -17,7 +17,7 @@ npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 - `modules/audio/README.md`：发音模块
 - `workflows/`：按场景的执行清单
 - `scripts/`：统一命令入口（已内聚实现）
-- `import_scratch/`：中间文件目录
+- 中间文件默认写到 `~/Documents/eudic-to-anki-temp/`
 
 ## 常用命令
 
@@ -26,4 +26,4 @@ npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 - 列分类：`python3 scripts/eudic_export.py --list-categories`
 - Anki 连通性：`python3 scripts/ankiconnect_import.py --ping`
 - 音频试跑：`python3 scripts/edge_tts_runner.py --text "semantic" --output /tmp/semantic.mp3`
-- 大批量 base64 解码：`python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o import_scratch/coach_batch_01.json`
+- 大批量 base64 解码：`python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o ~/Documents/eudic-to-anki-temp/coach_batch_01.json`

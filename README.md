@@ -47,8 +47,11 @@ skills/eudic-to-anki/
   references/         # token / Anki / Edge-TTS / coach prompt
   assets/             # TRVS-Lab note-type templates
   workflows/          # yesterday / date-range / word-list playbooks
-  import_scratch/     # intermediate artifacts (gitignored contents)
 ```
+
+Runtime artifacts are written outside the installed skill directory by default:
+
+- `~/Documents/eudic-to-anki-temp/`
 
 ## Typical Commands
 

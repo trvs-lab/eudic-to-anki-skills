@@ -48,8 +48,11 @@ skills/eudic-to-anki/
   references/         # token / Anki / Edge-TTS / coach 提示
   assets/             # TRVS-Lab 笔记类型模板
   workflows/          # 按场景的执行清单（昨天 / 日期区间 / 词表）
-  import_scratch/     # 中间产物（目录内容通常 gitignore）
 ```
+
+运行时中间产物默认写在 skill 安装目录之外：
+
+- `~/Documents/eudic-to-anki-temp/`
 
 ## 常用命令
 

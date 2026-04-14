@@ -9,12 +9,12 @@
 
 ## 输出
 
-- `import_scratch/*_export.csv`（推荐）
+- `~/Documents/eudic-to-anki-temp/*_export.csv`（推荐）
 
 ## 命令
 
 - 列分类：`python3 scripts/eudic_export.py --list-categories`
-- 按日期导出：`python3 scripts/eudic_export.py --all-categories --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --format csv --output import_scratch/_day_<YYYY-MM-DD>_export.csv`
+- 按日期导出：`python3 scripts/eudic_export.py --all-categories --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --format csv --output ~/Documents/eudic-to-anki-temp/_day_<YYYY-MM-DD>_export.csv`
 - 当 shell 未加载 token：`python3 scripts/run_with_login_zsh.py python3 scripts/eudic_export.py ...`
 
 ## 参考

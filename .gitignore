@@ -3,5 +3,3 @@
 **/__pycache__/
 *.py[cod]
 generated_audio/
-skills/eudic-to-anki/import_scratch/*
-!skills/eudic-to-anki/import_scratch/.gitignore

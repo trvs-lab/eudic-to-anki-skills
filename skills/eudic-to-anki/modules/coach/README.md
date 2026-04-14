@@ -11,10 +11,10 @@
 
 ## 脚本
 
-- `python3 scripts/build_dia_json_from_csv.py --csv <export.csv> --output import_scratch/partial.json --eudic-words-only`
-- `python3 scripts/merge_coach_with_partial.py --partial import_scratch/partial.json --coach import_scratch/coach_batch_01.json -o import_scratch/import.json`
-- `python3 scripts/validate_trvs_coach_json.py import_scratch/import.json`
-- `python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o import_scratch/coach_batch_01.json`
+- `python3 scripts/build_dia_json_from_csv.py --csv ~/Documents/eudic-to-anki-temp/export.csv --output ~/Documents/eudic-to-anki-temp/partial.json --eudic-words-only`
+- `python3 scripts/merge_coach_with_partial.py --partial ~/Documents/eudic-to-anki-temp/partial.json --coach ~/Documents/eudic-to-anki-temp/coach_batch_01.json -o ~/Documents/eudic-to-anki-temp/import.json`
+- `python3 scripts/validate_trvs_coach_json.py ~/Documents/eudic-to-anki-temp/import.json`
+- `python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o ~/Documents/eudic-to-anki-temp/coach_batch_01.json`
 
 ## 参考
 

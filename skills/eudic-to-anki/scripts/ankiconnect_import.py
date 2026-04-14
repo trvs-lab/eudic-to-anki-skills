@@ -28,6 +28,8 @@ API_VERSION = 6
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 DEFAULT_MODEL_SPEC_PATH = SKILL_DIR / "assets" / "trvs_lab_model.json"
+DEFAULT_ARTIFACT_DIR = Path.home() / "Documents" / "eudic-to-anki-temp"
+DEFAULT_AUDIO_DIR = DEFAULT_ARTIFACT_DIR / "generated_audio"
 
 
 class AnkiImportError(RuntimeError):
@@ -90,8 +92,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--audio-dir",
-        default="generated_audio",
-        help="Output directory for generated audio when using --audio-provider command.",
+        default=str(DEFAULT_AUDIO_DIR),
+        help=(
+            "Output directory for generated audio when using --audio-provider command. "
+            f"Default: {DEFAULT_AUDIO_DIR}"
+        ),
     )
     parser.add_argument(
         "--audio-field",
