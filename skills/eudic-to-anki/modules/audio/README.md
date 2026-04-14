@@ -16,6 +16,7 @@
 ## 在导入命令中的挂载方式
 
 - `--audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text \"{word}\" --output \"{output}\"'`
+- `--audio-command` 会按参数执行，不经过 shell；不要依赖管道、重定向、`$()` 等 shell 语法
 
 ## 参考
 

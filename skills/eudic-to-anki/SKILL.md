@@ -47,6 +47,7 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
   - `python3 scripts/validate_trvs_coach_json.py ~/Documents/eudic-to-anki-temp/_day_<D>_import.json`
 5. Import with audio (successful import triggers Anki sync by default; use `--no-sync` to skip):
   - `python3 scripts/ankiconnect_import.py --input ~/Documents/eudic-to-anki-temp/_day_<D>_import.json --deck words --create-deck --dia-upsert --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text "{word}" --output "{output}"'`
+  - `--audio-command` is parsed as argv and executed without a shell; shell operators like pipes/redirection are unsupported.
 6. Cleanup after success:
   - `bash scripts/cleanup_import_artifacts.sh`
 

@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import re
+import shlex
 import subprocess
 import sys
 import urllib.error
@@ -86,8 +87,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--audio-command",
         help=(
-            "Command template for --audio-provider command. Supported placeholders: "
-            "{word}, {text}, {output}, {voice}."
+            "Argument template for --audio-provider command. It is parsed with shlex "
+            "and executed without a shell. Supported placeholders: {word}, {text}, "
+            "{output}, {voice}."
         ),
     )
     parser.add_argument(
@@ -370,21 +372,38 @@ def generate_audio_with_command(
     voice: str,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    command = command_template.format(
-        word=word,
-        text=text,
-        output=str(output_path),
-        voice=voice,
-    )
     try:
-        subprocess.run(command, shell=True, check=True, cwd=Path.cwd())
+        template_args = shlex.split(command_template)
+    except ValueError as exc:
+        raise AnkiImportError(f"Invalid --audio-command template: {exc}") from exc
+    if not template_args:
+        raise AnkiImportError("--audio-command must not be empty.")
+
+    format_values = {
+        "word": word,
+        "text": text,
+        "output": str(output_path),
+        "voice": voice,
+    }
+    try:
+        command_args = [arg.format(**format_values) for arg in template_args]
+    except KeyError as exc:
+        placeholder = exc.args[0]
+        raise AnkiImportError(
+            "Unsupported placeholder in --audio-command: "
+            f"{placeholder!r}. Supported placeholders: "
+            "{word}, {text}, {output}, {voice}."
+        ) from exc
+    try:
+        subprocess.run(command_args, shell=False, check=True, cwd=Path.cwd())
     except subprocess.CalledProcessError as exc:
         raise AnkiImportError(
-            f"Audio generation command failed for '{word}': {command}"
+            f"Audio generation command failed for '{word}': {shlex.join(command_args)}"
         ) from exc
     if not output_path.exists():
         raise AnkiImportError(
-            f"Audio generation command finished but no file was created: {output_path}"
+            "Audio generation command finished but no file was created: "
+            f"{output_path}"
         )
     return output_path
 
