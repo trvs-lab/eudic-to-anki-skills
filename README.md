@@ -11,13 +11,7 @@ This repository follows the [Agent Skills](https://agentskills.io/) format and w
 ## Install
 
 ```bash
-npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki
-```
-
-If this repo always contains only this one skill:
-
-```bash
-npx skills add trvs-lab/eudic-to-anki-skills
+npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 ```
 
 ## Quick Start
