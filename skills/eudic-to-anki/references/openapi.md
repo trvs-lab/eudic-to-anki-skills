@@ -4,6 +4,7 @@
 
 1. 打开 [https://my.eudic.net/OpenAPI/Authorization](https://my.eudic.net/OpenAPI/Authorization)
 2. 登录并复制 token
+   <img width="3268" height="1952" alt="CleanShot 2026-04-14 at 14 33 39@2x" src="https://github.com/user-attachments/assets/67efb633-a856-4008-aa6d-0bbe9e35e83a" />
 3. 将下面命令中的「your-token-here」换成你的 token，并复制命令在终端执行：
 
 ```bash
