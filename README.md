@@ -70,4 +70,4 @@ python3 scripts/ankiconnect_import.py --ping
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).
