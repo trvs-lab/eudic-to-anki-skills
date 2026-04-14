@@ -44,7 +44,7 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
   - Agent writes refined coach JSON (8 fields) and merges (single file or batches + `scripts/merge_coach_with_partial.py`).
 4. Validate:
   - `python3 scripts/validate_trvs_coach_json.py import_scratch/_day_<D>_import.json`
-5. Import with audio:
+5. Import with audio (successful import triggers Anki sync by default; use `--no-sync` to skip):
   - `python3 scripts/ankiconnect_import.py --input import_scratch/_day_<D>_import.json --deck words --create-deck --dia-upsert --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text "{word}" --output "{output}"'`
 6. Cleanup after success:
   - `bash scripts/cleanup_import_artifacts.sh`
@@ -56,6 +56,7 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 - If subagent output is base64, decode via:
   - `python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o import_scratch/coach_batch_01.json`
 - Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types).
+- After a successful import, `ankiconnect_import.py` runs Anki sync by default; pass `--no-sync` to skip.
 - If validation fails (especially `root` format), regenerate only the failed batch/words and re-run validator before merge/import.
 
 ## Playbooks

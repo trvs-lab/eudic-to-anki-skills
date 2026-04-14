@@ -32,6 +32,7 @@ npx skills add trvs-lab/eudic-to-anki-skills
 
 - **Unified workflow**: export -> coach -> validate -> import -> cleanup
 - **Quality gate**: `validate_trvs_coach_json.py` blocks malformed/garbled JSON
+- **Post-import sync**: `ankiconnect_import.py` runs AnkiConnect `sync` after a successful import by default (`--no-sync` to skip)
 - **Large batch support**: split/merge and optional subagent base64 decode helper
 - **Model assets bundled**: TRVS-Lab model/templates included
 

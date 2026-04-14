@@ -23,6 +23,7 @@ npx skills add <owner>/<repo> --skill eudic-to-anki
 
 ## 常用命令
 
+- 导入成功后 `ankiconnect_import.py` **默认**会调用 Anki 同步（AnkiConnect `sync`）；不需要同步时加 `--no-sync`。
 - 环境检查：`bash scripts/check_env.sh`
 - 列分类：`python3 scripts/eudic_export.py --list-categories`
 - Anki 连通性：`python3 scripts/ankiconnect_import.py --ping`

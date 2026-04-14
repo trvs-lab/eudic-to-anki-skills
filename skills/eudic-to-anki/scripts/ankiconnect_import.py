@@ -139,9 +139,9 @@ def parse_args() -> argparse.Namespace:
         help="Validate the notes and show a summary without importing.",
     )
     parser.add_argument(
-        "--sync",
+        "--no-sync",
         action="store_true",
-        help="Run Anki sync after a successful import.",
+        help="Skip Anki sync after a successful import (default: sync runs).",
     )
     parser.add_argument(
         "--ping",
@@ -703,7 +703,7 @@ def main() -> int:
             if skipped_duplicates:
                 print(f"Skipped {skipped_duplicates} duplicate notes.")
 
-        if args.sync:
+        if not args.no_sync:
             client.invoke("sync")
             print("Triggered Anki sync.")
         return 0
