@@ -14,8 +14,13 @@ source ~/.bashrc
 source ~/.zshrc
 ```
 
-如果 agent 子进程拿不到 token，可通过：
+如果 agent 子进程拿不到 token，可直接调用包装脚本（不要再包 `zsh -lc`，也不要和其它准备动作用 `&&` 串接）：
 
 ```bash
 python3 scripts/run_with_login_zsh.py python3 scripts/eudic_export.py --list-categories
 ```
+
+对于受 rules 约束的导出命令：
+
+- 先把 `~/Documents/...` 展开成绝对路径，例如 `/Users/alice/Documents/eudic-to-anki-temp/...`
+- 若需要创建目录，先单独执行 `mkdir -p /Users/alice/Documents/eudic-to-anki-temp`
