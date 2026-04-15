@@ -40,6 +40,14 @@ def phon_map_first_row(csv_path: Path, build_mod) -> dict[str, str]:
     return first
 
 
+def note_pos(note: dict) -> str:
+    for key in ("part_of_speech", "pos", "词性"):
+        value = note.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--csv", type=Path, required=True)
@@ -91,12 +99,13 @@ def main() -> int:
                 meaning_list = [str(raw_meaning).strip()] if str(raw_meaning).strip() else []
             else:
                 meaning_list = [str(x).strip() for x in raw_meaning if str(x).strip()]
-            pos = str(c.get("part_of_speech") or "")
+            pos = note_pos(c)
             meaning = fuse_pos_into_meaning(meaning_list, pos)
             notes.append(
                 {
                     "word": w,
                     "pronunciation": ipa or str(c.get("pronunciation") or ""),
+                    "part_of_speech": pos,
                     "meaning": meaning,
                     "english_definition": c["english_definition"],
                     "root": c["root"],

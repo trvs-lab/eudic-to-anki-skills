@@ -57,7 +57,7 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
   - `python3 scripts/eudic_export.py --all-categories --start-date <D> --end-date <D> --format csv --output <ABS_TEMP_DIR>/_day_<D>_export.csv`
 4. Build placeholder + author coach:
   - `python3 scripts/build_dia_json_from_csv.py --csv <ABS_TEMP_DIR>/_day_<D>_export.csv --output <ABS_TEMP_DIR>/_day_<D>_partial.json --batch-date <D> --eudic-words-only`
-  - Agent writes refined coach JSON (8 fields) and merges (single file or batches + `scripts/merge_coach_with_partial.py`).
+  - Agent writes refined coach JSON. Each note must include `part_of_speech`, and every `meaning` line must start with a POS marker such as `n.`, `vt.`, `vi.`, `adj.`, or `adv.`. Then merge (single file or batches + `scripts/merge_coach_with_partial.py`).
 5. Validate:
   - `python3 scripts/validate_trvs_coach_json.py <ABS_TEMP_DIR>/_day_<D>_import.json`
 6. Import with audio (successful import triggers Anki sync by default; use `--no-sync` to skip):
@@ -69,10 +69,11 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 ## Quality Gates
 
 - Agent authors coach content; do not bulk-copy Eudic `exp`/`phon` into coach fields by default.
+- Coach JSON must preserve POS explicitly: include `part_of_speech` on every note, and keep POS markers at the start of each Chinese `meaning` line.
 - For large lists, use batched subagents and validate each batch before merge.
 - If subagent output is base64, decode via:
   - `python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o <ABS_TEMP_DIR>/coach_batch_01.json`
-- Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types).
+- Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types, missing POS markers in `meaning`, or missing `part_of_speech`).
 - After a successful import, `ankiconnect_import.py` runs Anki sync by default; pass `--no-sync` to skip.
 - If validation fails (especially `root` format), regenerate only the failed batch/words and re-run validator before merge/import.
 

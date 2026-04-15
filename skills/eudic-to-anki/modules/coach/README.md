@@ -1,10 +1,12 @@
 # Coach Module
 
-负责 TRVS-Lab 的 8 字段内容质量、批处理合并、编码安全与校验门禁。
+负责 TRVS-Lab 的 8 字段内容质量、词性保留、批处理合并、编码安全与校验门禁。
 
 ## 关键规则
 
-- 由 agent 生成 `pronunciation/meaning/english_definition/root/example/collocations` 等字段。
+- 由 agent 生成 `pronunciation/part_of_speech/meaning/english_definition/root/example/collocations` 等字段。
+- 每个 note 都必须带 `part_of_speech`，格式使用简短词性缩写，如 `n.`、`vt.`、`vi.`、`adj.`、`adv.`。
+- `meaning` 数组中的每一条中文释义都必须以词性缩写开头；不要输出裸中文义。
 - 大批量走分批（25-40 词）+ 每批校验 + merge。
 - 出现子 agent 信道噪声时，可让子 agent 输出单行 base64，再用解码脚本恢复。
 - 导入前必须通过 `validate_trvs_coach_json.py`。

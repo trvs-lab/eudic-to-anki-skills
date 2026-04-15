@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from coach_fields import meaning_line_has_pos_prefix
+
 REPLACEMENT = "\ufffd"
 # CJK + common extension blocks; root with morphological "+" must include a Chinese gloss (skill rule).
 _CJK_RE = re.compile(r"[\u3007\u3400-\u4dbf\u4e00-\u9fff\U00020000-\U0002ceaf\U00030000-\U000323af]")
@@ -27,6 +29,7 @@ _ROOT_BANNED_EN_RE = re.compile(
 REQUIRED_KEYS = (
     "word",
     "pronunciation",
+    "part_of_speech",
     "meaning",
     "english_definition",
     "root",
@@ -38,6 +41,14 @@ REQUIRED_KEYS = (
 
 def _has_replacement(s: str) -> bool:
     return REPLACEMENT in s
+
+
+def _note_pos(note: dict[str, Any]) -> str:
+    for key in ("part_of_speech", "pos", "词性"):
+        value = note.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
 
 
 def _validate_root_value(root_val: str, word: str, index: int) -> list[str]:
@@ -138,6 +149,8 @@ def _check_note(note: dict[str, Any], index: int, require_ipa_slashes: bool) -> 
                 f"(got {type(meanings).__name__})"
             )
         else:
+            if not any(isinstance(m, str) and m.strip() for m in meanings):
+                errs.append(f"note[{index}] word={w!r}: meaning must not be empty")
             for j, m in enumerate(meanings):
                 if not isinstance(m, str):
                     errs.append(
@@ -151,6 +164,23 @@ def _check_note(note: dict[str, Any], index: int, require_ipa_slashes: bool) -> 
                     errs.append(
                         f"note[{index}] word={w!r}: meaning[{j}] contains mojibake markers: {m!r}"
                     )
+                if m.strip() and not meaning_line_has_pos_prefix(m):
+                    errs.append(
+                        f"note[{index}] word={w!r}: meaning[{j}] must start with a POS marker "
+                        f"like 'n.', 'vt.', 'vi.', 'adj.' or 'adv.' (got {m!r})"
+                    )
+
+    pos = _note_pos(note)
+    if not pos:
+        errs.append(
+            f"note[{index}] word={w!r}: missing non-empty 'part_of_speech' "
+            "(use values like 'n.', 'vt.', 'vi.', 'adj.', 'adv.')"
+        )
+    elif not meaning_line_has_pos_prefix(pos):
+        errs.append(
+            f"note[{index}] word={w!r}: part_of_speech must look like a POS marker "
+            f"(got {pos!r})"
+        )
 
     colls = note.get("collocations")
     if colls is not None:

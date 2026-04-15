@@ -7,6 +7,23 @@ import json
 import sys
 from pathlib import Path
 
+from coach_fields import fuse_pos_into_meaning
+
+
+def _normalize_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    return [text] if text else []
+
+
+def _note_pos(note: dict) -> str:
+    for key in ("part_of_speech", "pos", "词性"):
+        value = note.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
 
 def main() -> int:
     p = argparse.ArgumentParser()
@@ -34,11 +51,14 @@ def main() -> int:
             print(f"missing coach for {w!r}", file=sys.stderr)
             return 1
         m = meta[w]
+        pos = _note_pos(c)
+        meaning = fuse_pos_into_meaning(_normalize_list(c.get("meaning", [])), pos)
         out_notes.append(
             {
                 "word": w,
                 "pronunciation": c.get("pronunciation", ""),
-                "meaning": c.get("meaning", []),
+                "part_of_speech": pos,
+                "meaning": meaning,
                 "english_definition": c.get("english_definition", ""),
                 "root": c.get("root", ""),
                 "example": c.get("example", ""),
