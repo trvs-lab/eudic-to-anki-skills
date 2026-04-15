@@ -6,7 +6,7 @@
 npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 ```
 
-安装完成后，在 agent 里以 **本目录为 cwd**（包含 `SKILL.md` 的目录）运行文档中的命令。详见仓库根目录 [README.md](../../README.md)。`EUDIC_TOKEN` 的配置步骤只写在 [references/openapi.md](references/openapi.md)，避免多处重复。
+安装完成后，如果你使用的是 Codex 客户端，再打开 [RULES_README.md](RULES_README.md)，按其中模板生成 `~/.codex/rules/eudic-to-anki.rules`，并把所有 `<HOME>` 替换成当前机器上的真实 home 绝对路径；这一步只针对 Codex。随后在 agent 里以 **本目录为 cwd**（包含 `SKILL.md` 的目录）运行文档中的命令。详见仓库根目录 [README.md](../../README.md)。`EUDIC_TOKEN` 的配置步骤只写在 [references/openapi.md](references/openapi.md)，避免多处重复。
 
 ## 目录结构
 

@@ -17,12 +17,24 @@ This repository follows the [Agent Skills](https://agentskills.io/) format and w
 npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 ```
 
+## Codex Post-Install Step
+
+If the user is installing this skill specifically for the Codex client, add one more required post-install step:
+
+1. Open `skills/eudic-to-anki/RULES_README.md`.
+2. Generate `~/.codex/rules/eudic-to-anki.rules` from the embedded `RULE_TEMPLATE`.
+3. Replace every `<HOME>` placeholder with the real absolute home path before writing the file.
+4. Treat rules generation as part of the Codex setup, not an optional hint.
+
+This is Codex-specific. Other agent runtimes do not need a Codex rules file unless they intentionally emulate Codex's execpolicy model.
+
 ## Quick Start
 
 1. Install the skill with `npx skills add ...`.
-2. Open `skills/eudic-to-anki/SKILL.md`.
-3. In your agent, run the documented commands with the skill directory (`skills/eudic-to-anki/`) as the working directory.
-4. Start with:
+2. If you are using Codex, open `skills/eudic-to-anki/RULES_README.md` and create `~/.codex/rules/eudic-to-anki.rules`.
+3. Open `skills/eudic-to-anki/SKILL.md`.
+4. In your agent, run the documented commands with the skill directory (`skills/eudic-to-anki/`) as the working directory.
+5. Start with:
    - `bash scripts/check_env.sh`
 
 ## What You Get
@@ -51,7 +63,7 @@ skills/eudic-to-anki/
 
 Runtime artifacts are written outside the installed skill directory by default:
 
-- `~/Documents/eudic-to-anki-temp/`
+- the dedicated Documents artifact dir, using its canonical absolute form such as `<ABS_TEMP_DIR>` / `/Users/alice/Documents/eudic-to-anki-temp/`
 
 ## Typical Commands
 

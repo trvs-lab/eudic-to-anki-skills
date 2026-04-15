@@ -17,12 +17,24 @@
 npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 ```
 
+## Codex 安装补充步骤
+
+如果用户是专门为 Codex 客户端安装这个 skill，还需要额外完成下面这一步：
+
+1. 打开 `skills/eudic-to-anki/RULES_README.md`
+2. 按其中内嵌的 `RULE_TEMPLATE` 生成 `~/.codex/rules/eudic-to-anki.rules`
+3. 在写入前，把所有 `<HOME>` 占位符替换成当前机器上的真实 home 绝对路径
+4. 把生成 rules 文件视为 Codex 环境配置的一部分，而不是可选提示
+
+这一步只针对 Codex。其他 agent/runtime 并不需要生成 Codex 的 rules 文件，除非它们刻意复用 Codex 的 execpolicy 模型。
+
 ## 快速开始
 
 1. 用 `npx skills add ...` 安装本 skill。
-2. 打开 `skills/eudic-to-anki/SKILL.md`。
-3. 在 Agent 中以 skill 目录（`skills/eudic-to-anki/`）为工作目录执行文档中的命令。
-4. 可先运行：
+2. 如果你使用的是 Codex，再打开 `skills/eudic-to-anki/RULES_README.md`，生成 `~/.codex/rules/eudic-to-anki.rules`。
+3. 打开 `skills/eudic-to-anki/SKILL.md`。
+4. 在 Agent 中以 skill 目录（`skills/eudic-to-anki/`）为工作目录执行文档中的命令。
+5. 可先运行：
    - `bash scripts/check_env.sh`
 
 ## 能做什么
@@ -52,7 +64,7 @@ skills/eudic-to-anki/
 
 运行时中间产物默认写在 skill 安装目录之外：
 
-- `~/Documents/eudic-to-anki-temp/`
+- 专用的 Documents 工件目录；执行时请使用展开后的绝对路径，例如 `<ABS_TEMP_DIR>` / `/Users/alice/Documents/eudic-to-anki-temp/`
 
 ## 常用命令
 
