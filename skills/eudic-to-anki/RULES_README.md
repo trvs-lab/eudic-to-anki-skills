@@ -19,8 +19,9 @@
 - 这些 rules 是 command-prefix based。
 - 命中这些 rules 的命令必须直连执行；不要加 `FOO=bar ...`、`env ...`、`/bin/zsh -lc ...`、`zsh -lc ...`、`bash -lc ...`。
 - 不要把 `mkdir`、`cd`、`export` 等准备动作和 rule-covered command 用 `&&`、`||`、`;`、管道或子 shell 串在一起。准备动作请单独执行。
-- 不要在 rule-sensitive command 中使用 `~` 或 `$HOME`；先展开成绝对路径。
-- 模板里允许的 `mkdir -p` 只用于 `~/Documents/eudic-to-anki-temp` 这个工件目录。
+- 绝对路径仍是首选；但模板额外覆盖了字面量 `~/Documents/eudic-to-anki-temp` 的直连 `mkdir -p` 作为 fallback，避免 agent 因此误判“Documents 不可写”。
+- `$HOME` 仍然不在规则覆盖范围内；规则敏感命令里不要用 `$HOME`。
+- 模板里允许的 `mkdir -p` 只用于 dedicated artifact dir：`<HOME>/Documents/eudic-to-anki-temp`，以及它的字面量 `~/Documents/eudic-to-anki-temp` fallback。
 
 ## 约束
 
@@ -39,7 +40,9 @@
 #    - no `env ...`
 #    - no `/bin/zsh -lc ...`, `zsh -lc ...`, or `bash -lc ...`
 #    - no `&&` / `||` / `;` wrappers around a rule-covered command
-# 3) Expand `~` and `$HOME` before execution.
+# 3) Absolute paths are preferred. As a fallback, the template also covers direct
+#    `mkdir -p ~/Documents/eudic-to-anki-temp` to avoid false "Documents not writable"
+#    conclusions. `$HOME` is still not covered.
 # 4) Cover both relative skill-root execution and absolute installed-skill execution.
 # 5) Temp-dir creation is intentionally limited to the dedicated artifact directory.
 
@@ -49,6 +52,15 @@ prefix_rule(
     justification = "Allow preparing the dedicated local artifact directory in a separate direct command.",
     match = [
         "mkdir -p <HOME>/Documents/eudic-to-anki-temp",
+    ],
+)
+
+prefix_rule(
+    pattern = ["mkdir", "-p", "~/Documents/eudic-to-anki-temp"],
+    decision = "allow",
+    justification = "Allow the same dedicated artifact directory when the direct command uses a literal '~/Documents/...' token.",
+    match = [
+        "mkdir -p ~/Documents/eudic-to-anki-temp",
     ],
 )
 

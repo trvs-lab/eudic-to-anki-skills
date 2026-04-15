@@ -31,7 +31,7 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 - Source: all Eudic categories unless user specifies category.
 - Deck: `words` unless user specifies.
 - Note type: `TRVS-Lab`.
-- Intermediate artifacts: `~/Documents/eudic-to-anki-temp/` only.
+- Intermediate artifacts: the user's dedicated Documents artifact dir only. Use the canonical absolute form `<ABS_TEMP_DIR>` such as `/Users/alice/Documents/eudic-to-anki-temp`.
 - Optional override for local testing/custom setups: `EUDIC_TO_ANKI_TEMP_DIR=/path/to/temp`.
 - For rule-sensitive runs, expand artifact paths to an absolute directory such as `/Users/alice/Documents/eudic-to-anki-temp`; do not execute them with `~` or `$HOME`.
 

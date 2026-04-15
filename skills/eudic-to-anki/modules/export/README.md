@@ -9,7 +9,7 @@
 
 ## 输出
 
-- `~/Documents/eudic-to-anki-temp/*_export.csv`（推荐）
+- `<ABS_TEMP_DIR>/*_export.csv`（推荐；例如 `/Users/alice/Documents/eudic-to-anki-temp/*_export.csv`）
 
 ## 执行约束
 
