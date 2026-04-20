@@ -11,6 +11,11 @@
 
 本仓库遵循 [Agent Skills](https://agentskills.io/) 规范，可与 Vercel skills CLI 配合使用。
 
+## 官方教程
+
+完整安装与使用说明请看这篇博客：
+[https://trvs.dev/blog/20260420-eudic-to-anki-skill/](https://trvs.dev/blog/20260420-eudic-to-anki-skill/)
+
 ## 安装
 
 ```bash

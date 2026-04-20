@@ -11,6 +11,11 @@ An open Agent Skill that exports words from the Eudic dictionary and turns them 
 
 This repository follows the [Agent Skills](https://agentskills.io/) format and works with the Vercel skills CLI.
 
+## Official Guide
+
+For a complete installation and usage walkthrough, read:
+[https://trvs.dev/blog/20260420-eudic-to-anki-skill/](https://trvs.dev/blog/20260420-eudic-to-anki-skill/)
+
 ## Install
 
 ```bash

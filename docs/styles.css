@@ -36,6 +36,23 @@ a {
   color: inherit;
 }
 
+.announcement {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  padding: 10px 14px;
+  font-size: 0.92rem;
+  font-weight: 560;
+  color: #fff;
+  background:
+    linear-gradient(90deg, rgba(0, 113, 227, 1), rgba(30, 144, 255, 0.95));
+  transition: filter 0.25s ease;
+}
+
+.announcement:hover {
+  filter: brightness(1.08);
+}
+
 .site-nav {
   position: sticky;
   top: 0;
@@ -178,6 +195,15 @@ main {
   border: 1px solid rgba(29, 29, 31, 0.2);
   color: var(--ink);
   background: rgba(255, 255, 255, 0.6);
+}
+
+.button-highlight {
+  color: #fff;
+  background: linear-gradient(120deg, #0a84ff, #1f6fff);
+}
+
+.button-highlight:hover {
+  box-shadow: 0 10px 30px rgba(0, 113, 227, 0.36);
 }
 
 .install-command {
