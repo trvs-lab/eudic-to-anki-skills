@@ -36,23 +36,6 @@ a {
   color: inherit;
 }
 
-.announcement {
-  display: block;
-  text-align: center;
-  text-decoration: none;
-  padding: 10px 14px;
-  font-size: 0.92rem;
-  font-weight: 560;
-  color: #fff;
-  background:
-    linear-gradient(90deg, rgba(0, 113, 227, 1), rgba(30, 144, 255, 0.95));
-  transition: filter 0.25s ease;
-}
-
-.announcement:hover {
-  filter: brightness(1.08);
-}
-
 .site-nav {
   position: sticky;
   top: 0;
@@ -408,37 +391,6 @@ main {
   font-family: "SF Mono", "JetBrains Mono", Menlo, Monaco, monospace;
   font-size: 0.83rem;
   line-height: 1.7;
-}
-
-.steps {
-  margin: 30px 0 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: quickstart;
-  display: grid;
-  gap: 12px;
-}
-
-.steps li {
-  counter-increment: quickstart;
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  align-items: start;
-  gap: 14px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.steps li::before {
-  content: "0" counter(quickstart);
-  font-family: "SF Mono", "JetBrains Mono", Menlo, Monaco, monospace;
-  color: var(--blue);
-  font-size: 0.86rem;
-}
-
-.steps code {
-  font-family: "SF Mono", "JetBrains Mono", Menlo, Monaco, monospace;
-  font-size: 0.86rem;
 }
 
 .final-cta {

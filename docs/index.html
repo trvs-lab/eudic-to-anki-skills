@@ -14,20 +14,12 @@
     <script defer src="./main.js"></script>
   </head>
   <body>
-    <a
-      class="announcement"
-      href="https://trvs.dev/blog/20260420-eudic-to-anki-skill/"
-      target="_blank"
-      rel="noreferrer"
-      >新发布：完整安装与使用指南 · 点击阅读博客</a
-    >
     <header class="site-nav">
       <a class="brand" href="#top">eudic-to-anki</a>
       <nav aria-label="主导航">
         <a href="https://trvs.dev/blog/20260420-eudic-to-anki-skill/" target="_blank" rel="noreferrer">安装教程</a>
         <a href="#overview">概览</a>
         <a href="#workflow">流程</a>
-        <a href="#quickstart">快速开始</a>
         <a href="https://github.com/trvs-lab/eudic-to-anki-skills" target="_blank" rel="noreferrer">GitHub</a>
       </nav>
       <a
@@ -56,7 +48,6 @@
                 rel="noreferrer"
                 >安装与使用教程</a
               >
-              <a class="button button-primary" href="#quickstart">Start Now</a>
               <a
                 class="button button-secondary"
                 href="https://github.com/trvs-lab/eudic-to-anki-skills"
@@ -143,20 +134,6 @@
 python3 scripts/eudic_export.py --list-categories
 python3 scripts/ankiconnect_import.py --ping</code></pre>
         </aside>
-      </section>
-
-      <section id="quickstart" class="section commands reveal">
-        <div class="section-head">
-          <p>Quick Start</p>
-          <h2>5 步完成初次运行。</h2>
-        </div>
-        <ol class="steps">
-          <li>安装 Skill：<code>npx skills add ...</code></li>
-          <li>打开 `skills/eudic-to-anki/SKILL.md` 查看入口命令。</li>
-          <li>运行 <code>bash scripts/check_env.sh</code> 做环境预检。</li>
-          <li>按场景执行 workflow（yesterday / date-range / word-list）。</li>
-          <li>确认 Anki 导入成功并完成云同步。</li>
-        </ol>
       </section>
 
       <section class="section final-cta reveal">
