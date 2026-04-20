@@ -17,6 +17,20 @@
 npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 ```
 
+## GitHub Pages
+
+仓库已新增一个 Apple 风格的介绍页，放在 `docs/` 目录：
+
+- 页面入口：`docs/index.html`
+- 自动发布工作流：`.github/workflows/deploy-pages.yml`
+
+发布步骤：
+
+1. 将改动推送到 `main`
+2. 打开仓库设置里的 **Pages**
+3. 将 Source 设为 **GitHub Actions**（如果尚未设置）
+4. 等待 **Deploy GitHub Pages** 工作流执行完成
+
 ## Codex 安装补充步骤
 
 如果用户是专门为 Codex 客户端安装这个 skill，还需要额外完成下面这一步：

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>eudic-to-anki | GitHub Pages</title>
+    <meta
+      name="description"
+      content="eudic-to-anki 是一个开源 Agent Skill：将欧路词典生词自动导出、生成背词卡片并导入 Anki。"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="./main.js"></script>
+  </head>
+  <body>
+    <header class="site-nav">
+      <a class="brand" href="#top">eudic-to-anki</a>
+      <nav aria-label="主导航">
+        <a href="#overview">概览</a>
+        <a href="#workflow">流程</a>
+        <a href="#quickstart">快速开始</a>
+        <a href="https://github.com/trvs-lab/eudic-to-anki-skills" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+      <a
+        class="nav-button"
+        href="https://github.com/trvs-lab/eudic-to-anki-skills?tab=readme-ov-file#install"
+        target="_blank"
+        rel="noreferrer"
+        >Install</a
+      >
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-shell">
+          <div class="hero-copy">
+            <p class="eyebrow">TRVS LAB · OPEN AGENT SKILL</p>
+            <h1>把欧路生词，变成 Anki 的长期记忆系统。</h1>
+            <p class="lead">
+              一条完整流水线覆盖导出、卡片生成、发音合成、导入与云同步，减少重复操作，把精力留给学习本身。
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#quickstart">Start Now</a>
+              <a
+                class="button button-secondary"
+                href="https://github.com/trvs-lab/eudic-to-anki-skills"
+                target="_blank"
+                rel="noreferrer"
+                >View Repository</a
+              >
+            </div>
+            <div class="install-command" aria-label="安装命令">
+              <span>安装命令</span>
+              <code>npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y</code>
+            </div>
+          </div>
+
+          <aside class="hero-visual reveal">
+            <p class="visual-kicker">Pipeline</p>
+            <ol>
+              <li><span>01</span> 导出欧路生词</li>
+              <li><span>02</span> Agent 生成卡片</li>
+              <li><span>03</span> 质量校验</li>
+              <li><span>04</span> Edge-TTS 发音</li>
+              <li><span>05</span> AnkiConnect 导入</li>
+              <li><span>06</span> 成功后自动同步</li>
+            </ol>
+          </aside>
+        </div>
+      </section>
+
+      <section id="overview" class="section reveal">
+        <div class="section-head">
+          <p>Overview</p>
+          <h2>一个专注学习闭环的 Skill，不是脚本拼盘。</h2>
+        </div>
+        <div class="feature-lines">
+          <article>
+            <h3>Unified Workflow</h3>
+            <p>把导出、生成、校验、导入、清理连接成稳定流程，减少手动切换与中断。</p>
+          </article>
+          <article>
+            <h3>Quality Gate</h3>
+            <p>卡片在导入前自动经过格式与内容校验，保障批量导入后的可用性与一致性。</p>
+          </article>
+          <article>
+            <h3>Built-in Assets</h3>
+            <p>内置 TRVS-Lab 模板与工作流文档，开箱即可运行，不必从零搭基础设施。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="workflow" class="section workflow reveal">
+        <div class="section-head">
+          <p>Workflow</p>
+          <h2>从输入新词到进入复习队列，路径清晰且可追踪。</h2>
+        </div>
+        <div class="workflow-grid">
+          <div>
+            <h3>01 · Data In</h3>
+            <p>通过欧路 OpenAPI 按「昨天 / 日期区间 / 词表」拉取词条。</p>
+          </div>
+          <div>
+            <h3>02 · Card Build</h3>
+            <p>Agent 结合模板构建字段内容，确保卡片结构符合目标 Note Type。</p>
+          </div>
+          <div>
+            <h3>03 · Ship to Anki</h3>
+            <p>生成发音后使用 AnkiConnect 导入，成功后自动触发 Anki 同步。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section split reveal">
+        <div>
+          <p class="small-kicker">What You Configure</p>
+          <h2>只需要配置关键依赖，其他交给流水线。</h2>
+          <ul class="check-list">
+            <li><strong>EUDIC_TOKEN</strong>：用于访问欧路词典 OpenAPI。</li>
+            <li><strong>Anki Desktop + AnkiConnect</strong>：用于卡片写入与连通检查。</li>
+            <li><strong>Codex 用户</strong>：按 `RULES_README.md` 生成 rules 文件。</li>
+          </ul>
+        </div>
+        <aside class="glass">
+          <p>典型启动命令</p>
+          <pre><code>bash scripts/check_env.sh
+python3 scripts/eudic_export.py --list-categories
+python3 scripts/ankiconnect_import.py --ping</code></pre>
+        </aside>
+      </section>
+
+      <section id="quickstart" class="section commands reveal">
+        <div class="section-head">
+          <p>Quick Start</p>
+          <h2>5 步完成初次运行。</h2>
+        </div>
+        <ol class="steps">
+          <li>安装 Skill：<code>npx skills add ...</code></li>
+          <li>打开 `skills/eudic-to-anki/SKILL.md` 查看入口命令。</li>
+          <li>运行 <code>bash scripts/check_env.sh</code> 做环境预检。</li>
+          <li>按场景执行 workflow（yesterday / date-range / word-list）。</li>
+          <li>确认 Anki 导入成功并完成云同步。</li>
+        </ol>
+      </section>
+
+      <section class="section final-cta reveal">
+        <p class="small-kicker">eudic-to-anki</p>
+        <h2>让单词管理变成自动化系统，而不是重复劳动。</h2>
+        <a
+          class="button button-primary"
+          href="https://github.com/trvs-lab/eudic-to-anki-skills"
+          target="_blank"
+          rel="noreferrer"
+          >Open on GitHub</a
+        >
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>MIT License · Built for Agent Skills</p>
+    </footer>
+  </body>
+</html>
