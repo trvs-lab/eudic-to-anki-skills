@@ -14,7 +14,7 @@
    echo 'export EUDIC_TOKEN="your-token-here"' >> ~/.zshrc
    source ~/.zshrc
    ```
-5. 如果你的终端输出的是 `/bin/zsh` 则复制下面的命令到终端，并把命令中的「your-token-here」换成你的 token 后按回车执行：
+5. 如果你的终端输出的是 `/bin/bash` 则复制下面的命令到终端，并把命令中的「your-token-here」换成你的 token 后按回车执行：
    ```bash
    echo 'export EUDIC_TOKEN="your-token-here"' >> ~/.bashrc
    source ~/.bashrc
