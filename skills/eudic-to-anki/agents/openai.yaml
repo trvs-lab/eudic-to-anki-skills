@@ -1,4 +1,4 @@
 interface:
   display_name: "Eudic Anki Pipeline"
-  short_description: "Single skill for Eudic export, coach authoring, audio, and Anki import"
-  default_prompt: "Use $eudic-to-anki to run the full Eudic-to-Anki pipeline with modular workflow (export, coach, audio, import)."
+  short_description: "Single skill for quality-gated Eudic export, coach authoring, audio, and Anki import"
+  default_prompt: "Use $eudic-to-anki to run the full Eudic-to-Anki pipeline with source-first examples, regenerated concise meanings, friendly English definitions, root/affix breakdowns, collocations, required audio, validation, and import."

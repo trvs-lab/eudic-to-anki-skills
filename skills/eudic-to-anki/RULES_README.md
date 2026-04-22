@@ -198,7 +198,7 @@ prefix_rule(
     justification = "Allow AnkiConnect import/ping when running from skill root.",
     match = [
         "python3 scripts/ankiconnect_import.py --ping",
-        "python3 scripts/ankiconnect_import.py --input <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_import.json --deck words --create-deck --dia-upsert",
+        "python3 scripts/ankiconnect_import.py --input <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_import.json --deck words --create-deck --dia-upsert --require-audio --verify-required-fields --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text \"{word}\" --output \"{output}\"'",
     ],
 )
 
@@ -208,7 +208,7 @@ prefix_rule(
     justification = "Allow AnkiConnect import/ping with absolute installed-skill path.",
     match = [
         "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/ankiconnect_import.py --ping",
-        "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/ankiconnect_import.py --input <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_import.json --deck words --create-deck --dia-upsert",
+        "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/ankiconnect_import.py --input <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_import.json --deck words --create-deck --dia-upsert --require-audio --verify-required-fields --audio-provider command --audio-format mp3 --audio-command 'python3 <HOME>/.agents/skills/eudic-to-anki/scripts/edge_tts_runner.py --text \"{word}\" --output \"{output}\"'",
     ],
 )
 

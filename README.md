@@ -59,7 +59,7 @@ This is Codex-specific. Other agent runtimes do not need a Codex rules file unle
 ## What You Get
 
 - **Unified workflow**: export → build cards → validate → import → cleanup
-- **Quality gate**: generated cards are checked automatically against the expected format
+- **Quality gate**: generated cards are checked for complete IPA, concise regenerated Chinese meanings, friendly English definitions, source-first examples, root/affix breakdowns, audio, and common collocations
 - **Post-import sync**: after a successful import into Anki, changes sync to the cloud by default
 - **Templates included**: TRVS-Lab note type and related assets ship with the skill
 

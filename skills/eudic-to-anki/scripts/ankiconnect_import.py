@@ -25,6 +25,7 @@ DEFAULT_MODEL = STRUCTURED_VOCAB_MODEL
 DEFAULT_AUDIO_FIELD = "发音"
 DEFAULT_AUDIO_FORMAT = "mp3"
 API_VERSION = 6
+TRVS_REQUIRED_FIELDS = ("音标", "释义", "英英", "词根", "例句", "常用搭配")
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
@@ -144,6 +145,22 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Validate the notes and show a summary without importing.",
+    )
+    parser.add_argument(
+        "--require-audio",
+        action="store_true",
+        help=(
+            f"{STRUCTURED_VOCAB_MODEL} only: require every final 发音 field to contain "
+            "a [sound:...] tag. Use with --audio-provider command/existing."
+        ),
+    )
+    parser.add_argument(
+        "--verify-required-fields",
+        action="store_true",
+        help=(
+            f"{STRUCTURED_VOCAB_MODEL} only: verify required card fields in the payload "
+            "and, after import/upsert, in the affected Anki notes."
+        ),
     )
     parser.add_argument(
         "--no-sync",
@@ -337,6 +354,69 @@ def build_basic_fields(note: dict[str, Any], front_field: str, back_field: str) 
         front_field: front,
         back_field: back,
     }
+
+
+def _field_text_value(raw: Any) -> str:
+    if isinstance(raw, dict):
+        return normalize_text(raw.get("value"))
+    return normalize_text(raw)
+
+
+def _missing_required_field_names(fields: dict[str, Any], require_audio: bool) -> list[str]:
+    required = list(TRVS_REQUIRED_FIELDS)
+    if require_audio:
+        required.append("发音")
+    missing: list[str] = []
+    for name in required:
+        value = _field_text_value(fields.get(name))
+        if not value:
+            missing.append(name)
+            continue
+        if name == "发音" and require_audio and not value.startswith("[sound:"):
+            missing.append(name)
+    return missing
+
+
+def verify_payload_required_fields(
+    payloads: list[dict[str, Any]],
+    *,
+    require_audio: bool,
+) -> None:
+    problems: list[str] = []
+    for payload in payloads:
+        if payload.get("modelName") != STRUCTURED_VOCAB_MODEL:
+            continue
+        fields = payload.get("fields") or {}
+        word = _field_text_value(fields.get("单词")) or "<unknown>"
+        missing = _missing_required_field_names(fields, require_audio)
+        if missing:
+            problems.append(f"{word}: missing/invalid {', '.join(missing)}")
+    if problems:
+        detail = "; ".join(problems[:10])
+        extra = "" if len(problems) <= 10 else f"; ... and {len(problems) - 10} more"
+        raise AnkiImportError(f"Required TRVS-Lab fields failed payload check: {detail}{extra}")
+
+
+def verify_anki_required_fields(
+    client: AnkiConnectClient,
+    note_ids: list[int],
+    *,
+    require_audio: bool,
+) -> None:
+    if not note_ids:
+        return
+    infos = client.invoke("notesInfo", notes=note_ids)
+    problems: list[str] = []
+    for info in infos or []:
+        fields = info.get("fields") or {}
+        word = _field_text_value(fields.get("单词")) or f"note:{info.get('noteId', '?')}"
+        missing = _missing_required_field_names(fields, require_audio)
+        if missing:
+            problems.append(f"{word}: missing/invalid {', '.join(missing)}")
+    if problems:
+        detail = "; ".join(problems[:10])
+        extra = "" if len(problems) <= 10 else f"; ... and {len(problems) - 10} more"
+        raise AnkiImportError(f"Required TRVS-Lab fields failed Anki check: {detail}{extra}")
 
 
 def sanitize_filename(text: str) -> str:
@@ -567,9 +647,10 @@ def dedupe_dia_payloads_last_wins(payloads: list[dict[str, Any]]) -> list[dict[s
 def upsert_dia_notes(
     client: AnkiConnectClient,
     payloads: list[dict[str, Any]],
-) -> tuple[int, int, list[dict[str, Any]]]:
+) -> tuple[int, int, list[dict[str, Any]], list[int]]:
     """Update existing notes (and reset cards to new) or collect payloads to add."""
     to_add: list[dict[str, Any]] = []
+    updated_note_ids: list[int] = []
     updated_notes = 0
     for payload in payloads:
         word = payload["fields"]["单词"]
@@ -577,6 +658,7 @@ def upsert_dia_notes(
             client, payload["deckName"], payload["modelName"], word
         )
         if nids:
+            updated_note_ids.extend(int(nid) for nid in nids)
             for nid in nids:
                 client.invoke(
                     "updateNote",
@@ -595,7 +677,7 @@ def upsert_dia_notes(
             updated_notes += len(nids)
         else:
             to_add.append(payload)
-    return updated_notes, len(to_add), to_add
+    return updated_notes, len(to_add), to_add, updated_note_ids
 
 
 def ensure_deck(client: AnkiConnectClient, deck_name: str, create_if_missing: bool) -> None:
@@ -638,6 +720,10 @@ def main() -> int:
             raise AnkiImportError(
                 f"--dia-upsert is only supported with --model {STRUCTURED_VOCAB_MODEL}."
             )
+        if (args.require_audio or args.verify_required_fields) and args.model != STRUCTURED_VOCAB_MODEL:
+            raise AnkiImportError(
+                f"--require-audio/--verify-required-fields are only supported with --model {STRUCTURED_VOCAB_MODEL}."
+            )
 
         raw_notes = load_notes(input_path)
         if not raw_notes:
@@ -674,6 +760,9 @@ def main() -> int:
             skipped_duplicates = len(payload_notes) - len(filtered_notes)
             payload_notes = filtered_notes
 
+        if args.require_audio or args.verify_required_fields:
+            verify_payload_required_fields(payload_notes, require_audio=args.require_audio)
+
         if args.dry_run:
             print(
                 f"Validated {len(raw_notes)} notes for deck '{args.deck}' "
@@ -699,6 +788,8 @@ def main() -> int:
                 preview_fields = payload_notes[0]["fields"]
                 preview_key = "单词" if args.model == STRUCTURED_VOCAB_MODEL else args.front_field
                 print(f"Preview front: {preview_fields.get(preview_key, '')}")
+            if args.verify_required_fields:
+                print("Verified required TRVS-Lab payload fields.")
             return 0
 
         if not payload_notes:
@@ -708,24 +799,36 @@ def main() -> int:
             return 0
 
         if args.dia_upsert:
-            updated_ct, _pending_add_ct, to_add = upsert_dia_notes(client, payload_notes)
+            updated_ct, _pending_add_ct, to_add, updated_note_ids = upsert_dia_notes(client, payload_notes)
             imported = 0
+            affected_note_ids = list(updated_note_ids)
             if to_add:
                 note_ids = client.invoke("addNotes", notes=to_add)
-                imported = sum(1 for note_id in note_ids if note_id is not None)
+                added_note_ids = [int(note_id) for note_id in note_ids if note_id is not None]
+                affected_note_ids.extend(added_note_ids)
+                imported = len(added_note_ids)
             print(
                 f"{STRUCTURED_VOCAB_MODEL} upsert: updated {updated_ct} note(s) (fields + tags, cards reset to new), "
                 f"added {imported} new note(s) in deck '{args.deck}'."
             )
         else:
             note_ids = client.invoke("addNotes", notes=payload_notes)
-            imported = sum(1 for note_id in note_ids if note_id is not None)
+            affected_note_ids = [int(note_id) for note_id in note_ids if note_id is not None]
+            imported = len(affected_note_ids)
             print(
                 f"Imported {imported} notes into deck '{args.deck}' "
                 f"using model '{args.model}'."
             )
             if skipped_duplicates:
                 print(f"Skipped {skipped_duplicates} duplicate notes.")
+
+        if args.verify_required_fields:
+            verify_anki_required_fields(
+                client,
+                affected_note_ids,
+                require_audio=args.require_audio,
+            )
+            print(f"Verified required TRVS-Lab fields in {len(affected_note_ids)} Anki note(s).")
 
         if not args.no_sync:
             client.invoke("sync")

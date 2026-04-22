@@ -5,13 +5,15 @@ All eight coach fields—including **`pronunciation`**—are written by the **ex
 `word-coach-json-prompt.md` (`eudic-to-anki` skill default: **no** Eudic `phon` prefill
 or pronunciation patch). This script emits placeholders only, plus optional `--eudic-phon-for-ipa`
 / `--patch-pronunciations-in-json` for **optional manual** use, and built-in COACH rows for a few
-demo lemmas used in tests.
+demo lemmas used in tests. Eudic `context_line` is preserved as `source_context` so examples can
+keep the user's real reading context.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import html
 import json
 import re
 from pathlib import Path
@@ -82,12 +84,23 @@ def clean_eudic_phon(raw: str, word: str = "") -> str:
     return wrap_ipa(inner)
 
 
+def clean_context_line(raw: str) -> str:
+    """Clean Eudic `context_line` while preserving the user's source sentence."""
+    text = str(raw or "")
+    text = re.sub(r"<br\s*/?>", " ", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
 def note_words_only(
     word: str,
     *,
     source: str,
     tags: list[str],
     pronunciation: str = "",
+    source_context: str = "",
 ) -> dict[str, object]:
     """Placeholder note: only `word` is authoritative; coach/LLM fills the rest."""
     return {
@@ -100,6 +113,7 @@ def note_words_only(
         "collocations": [],
         "audio_html": "",
         "source": source,
+        "source_context": source_context,
         "tags": tags,
     }
 
@@ -124,6 +138,7 @@ def note_from_csv_row_with_coach(
     root = str(base["root"])
     example = str(base["example"])
     collocations = base["collocations"]
+    source_context = clean_context_line(row.get("context_line") or "")
     if not isinstance(collocations, list):
         collocations = list(collocations) if collocations else []
     return {
@@ -136,6 +151,7 @@ def note_from_csv_row_with_coach(
         "collocations": collocations,
         "audio_html": "",
         "source": source,
+        "source_context": source_context,
         "tags": tags,
     }
 
@@ -350,7 +366,11 @@ def main() -> int:
                     pron = clean_eudic_phon(str(row.get("phon") or ""), word=w)
                 notes.append(
                     note_words_only(
-                        w, source=args.source, tags=tags, pronunciation=pron
+                        w,
+                        source=args.source,
+                        tags=tags,
+                        pronunciation=pron,
+                        source_context=clean_context_line(row.get("context_line") or ""),
                     )
                 )
 

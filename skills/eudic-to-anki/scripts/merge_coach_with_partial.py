@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Merge coach-only JSON files with partial.json (tags, source). Coach files: {"notes":[...]}."""
+"""Merge coach-only JSON files with partial.json (tags, source, source_context)."""
 from __future__ import annotations
 
 import argparse
@@ -33,7 +33,14 @@ def main() -> int:
     args = p.parse_args()
 
     partial = json.loads(args.partial.read_text(encoding="utf-8"))
-    meta = {n["word"]: {"source": n.get("source"), "tags": n.get("tags")} for n in partial.get("notes", [])}
+    meta = {
+        n["word"]: {
+            "source": n.get("source"),
+            "source_context": n.get("source_context", ""),
+            "tags": n.get("tags"),
+        }
+        for n in partial.get("notes", [])
+    }
 
     by_word: dict[str, dict] = {}
     for path in args.coach:
@@ -65,6 +72,7 @@ def main() -> int:
                 "collocations": c.get("collocations", []),
                 "audio_html": c.get("audio_html", ""),
                 "source": m.get("source"),
+                "source_context": m.get("source_context", ""),
                 "tags": m.get("tags"),
             }
         )

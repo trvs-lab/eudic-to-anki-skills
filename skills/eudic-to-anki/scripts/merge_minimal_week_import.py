@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build final week import JSON: merge minimal coach mapping + optional CSV `phon` into IPA.
+"""Build final week import JSON: merge minimal coach mapping + optional CSV metadata.
 
 The default `eudic-to-anki` skill path is agent-written IPA only; this helper still
 applies Eudic `phon` when building from `minimal_coach_week.json` unless you change it to rely on
-agent-filled `pronunciation` in the mapping instead.
+agent-filled `pronunciation` in the mapping instead. It also preserves `context_line` as
+`source_context` for source-first examples.
 """
 from __future__ import annotations
 
@@ -40,6 +41,17 @@ def phon_map_first_row(csv_path: Path, build_mod) -> dict[str, str]:
     return first
 
 
+def source_context_map_first_row(csv_path: Path, build_mod) -> dict[str, str]:
+    first: dict[str, str] = {}
+    with csv_path.open("r", encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            w = (row.get("word") or "").strip()
+            if not w or w in first:
+                continue
+            first[w] = build_mod.clean_context_line(row.get("context_line") or "")
+    return first
+
+
 def note_pos(note: dict) -> str:
     for key in ("part_of_speech", "pos", "词性"):
         value = note.get(key)
@@ -67,6 +79,7 @@ def main() -> int:
 
     build_mod = _load_build_module()
     phon = phon_map_first_row(args.csv, build_mod)
+    source_contexts = source_context_map_first_row(args.csv, build_mod)
 
     tags_meta: dict[str, dict] = {}
     if args.tags_from and args.tags_from.exists():
@@ -76,6 +89,7 @@ def main() -> int:
             if w:
                 tags_meta[w] = {
                     "source": n.get("source", "eudic cloud"),
+                    "source_context": n.get("source_context", ""),
                     "tags": n.get("tags", []),
                 }
 
@@ -113,6 +127,7 @@ def main() -> int:
                     "collocations": c["collocations"],
                     "audio_html": "",
                     "source": meta["source"],
+                    "source_context": meta.get("source_context") or source_contexts.get(w, ""),
                     "tags": meta["tags"],
                 }
             )

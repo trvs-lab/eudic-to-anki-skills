@@ -22,8 +22,11 @@ npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 ## 常用命令
 
 - 导入成功后 `ankiconnect_import.py` **默认**会调用 Anki 同步（AnkiConnect `sync`）；不需要同步时加 `--no-sync`。
+- 最终导入前必须通过内容质量校验：完整 IPA、简洁中文释义、通俗解释型英英释义、来源句优先例句、词根词缀拆解、常用搭配。
 - 环境检查：`bash scripts/check_env.sh`
 - 列分类：`python3 scripts/eudic_export.py --list-categories`
 - Anki 连通性：`python3 scripts/ankiconnect_import.py --ping`
+- 导入预演：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run`
+- 真实导入：加 `--require-audio --verify-required-fields`，并用 audio provider 生成/保留 `发音` 字段。
 - 音频试跑：`python3 scripts/edge_tts_runner.py --text "semantic" --output /tmp/semantic.mp3`
 - 大批量 base64 解码：`python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o <ABS_TEMP_DIR>/coach_batch_01.json`

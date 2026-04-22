@@ -9,10 +9,18 @@
 python3 scripts/ankiconnect_import.py --ping
 ```
 
+- 导入前预演：
+
+```bash
+python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run
+```
+
 - 导入示例（成功后默认会 `sync`；若不想同步加 `--no-sync`）：
 
 ```bash
-python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/import.json --deck words --create-deck
+python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/import.json --deck words --create-deck --dia-upsert --require-audio --verify-required-fields --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text "{word}" --output "{output}"'
 ```
+
+- `--require-audio` 会要求最终 `发音` 字段为 `[sound:...]`；`--verify-required-fields` 会导入后回读 Anki，检查 `音标/释义/英英/词根/例句/常用搭配/发音`。
 
 - 其中 `<ABS_TEMP_DIR>` 代表展开后的真实绝对目录，例如 `/Users/alice/Documents/eudic-to-anki-temp`
