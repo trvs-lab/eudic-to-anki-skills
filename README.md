@@ -14,27 +14,13 @@ This repository follows the [Agent Skills](https://agentskills.io/) format and w
 ## Official Guide
 
 For a complete installation and usage walkthrough, read:
-[https://trvs.dev/blog/20260420-eudic-to-anki-skill/](https://trvs.dev/blog/20260420-eudic-to-anki-skill/)
+[https://trvs.dev/blog/20260419-eudic-to-anki-skill/](https://trvs.dev/blog/20260419-eudic-to-anki-skill/)
 
 ## Install
 
 ```bash
 npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 ```
-
-## GitHub Pages
-
-This repository now includes a dedicated landing page under `docs/` with an Apple-inspired visual style:
-
-- page entry: `docs/index.html`
-- auto deploy workflow: `.github/workflows/deploy-pages.yml`
-
-To publish it:
-
-1. Push changes to `main`
-2. In GitHub repository settings, open **Pages**
-3. Set source to **GitHub Actions** (if not already set)
-4. Wait for the **Deploy GitHub Pages** workflow to finish
 
 ## Codex Post-Install Step
 

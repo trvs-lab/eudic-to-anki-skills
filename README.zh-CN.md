@@ -14,27 +14,13 @@
 ## 官方教程
 
 完整安装与使用说明请看这篇博客：
-[https://trvs.dev/blog/20260420-eudic-to-anki-skill/](https://trvs.dev/blog/20260420-eudic-to-anki-skill/)
+[https://trvs.dev/blog/20260419-eudic-to-anki-skill/](https://trvs.dev/blog/20260419-eudic-to-anki-skill/)
 
 ## 安装
 
 ```bash
 npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 ```
-
-## GitHub Pages
-
-仓库已新增一个 Apple 风格的介绍页，放在 `docs/` 目录：
-
-- 页面入口：`docs/index.html`
-- 自动发布工作流：`.github/workflows/deploy-pages.yml`
-
-发布步骤：
-
-1. 将改动推送到 `main`
-2. 打开仓库设置里的 **Pages**
-3. 将 Source 设为 **GitHub Actions**（如果尚未设置）
-4. 等待 **Deploy GitHub Pages** 工作流执行完成
 
 ## Codex 安装补充步骤
 
