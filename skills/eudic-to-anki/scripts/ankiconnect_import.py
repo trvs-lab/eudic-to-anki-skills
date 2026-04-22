@@ -132,16 +132,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             f"{STRUCTURED_VOCAB_MODEL} only: match existing notes in this deck by the 单词 field, "
-            "then update fields and tags while preserving scheduling/progress. "
+            "update fields and tags, then reset existing cards to new by default. "
             "Words appearing multiple times in the input keep the last payload per word."
         ),
     )
     parser.add_argument(
-        "--reset-progress-on-update",
+        "--preserve-progress-on-update",
         action="store_true",
         help=(
-            f"{STRUCTURED_VOCAB_MODEL} --dia-upsert only: after updating existing notes, "
-            "forget their cards so scheduling resets to new. Off by default."
+            f"{STRUCTURED_VOCAB_MODEL} --dia-upsert only: update existing notes without "
+            "forgetting cards, preserving scheduling/progress. Off by default."
         ),
     )
     parser.add_argument(
@@ -656,7 +656,7 @@ def upsert_dia_notes(
     client: AnkiConnectClient,
     payloads: list[dict[str, Any]],
     *,
-    reset_progress_on_update: bool,
+    preserve_progress_on_update: bool,
 ) -> tuple[int, int, list[dict[str, Any]], list[int]]:
     """Update existing notes or collect payloads to add."""
     to_add: list[dict[str, Any]] = []
@@ -678,7 +678,7 @@ def upsert_dia_notes(
                         "tags": payload["tags"],
                     },
                 )
-                if reset_progress_on_update:
+                if not preserve_progress_on_update:
                     infos = client.invoke("notesInfo", notes=[nid])
                     card_ids: list[int] = []
                     for info in infos or []:
@@ -731,8 +731,8 @@ def main() -> int:
             raise AnkiImportError(
                 f"--dia-upsert is only supported with --model {STRUCTURED_VOCAB_MODEL}."
             )
-        if args.reset_progress_on_update and not args.dia_upsert:
-            raise AnkiImportError("--reset-progress-on-update requires --dia-upsert.")
+        if args.preserve_progress_on_update and not args.dia_upsert:
+            raise AnkiImportError("--preserve-progress-on-update requires --dia-upsert.")
         if (args.require_audio or args.verify_required_fields) and args.model != STRUCTURED_VOCAB_MODEL:
             raise AnkiImportError(
                 f"--require-audio/--verify-required-fields are only supported with --model {STRUCTURED_VOCAB_MODEL}."
@@ -793,10 +793,10 @@ def main() -> int:
                         would_add += 1
                 print(
                     f"{STRUCTURED_VOCAB_MODEL} upsert dry-run: {would_update} existing note(s) would update "
-                    f"with scheduling preserved; {would_add} new note(s) would be added."
+                    f"and reset to new; {would_add} new note(s) would be added."
                 )
-                if args.reset_progress_on_update and would_update:
-                    print("Reset-on-update is enabled: existing note cards would be reset to new.")
+                if args.preserve_progress_on_update and would_update:
+                    print("Preserve-progress-on-update is enabled: existing note scheduling would be preserved.")
             elif skipped_duplicates:
                 print(f"Would skip {skipped_duplicates} duplicate notes.")
             if payload_notes:
@@ -817,7 +817,7 @@ def main() -> int:
             updated_ct, _pending_add_ct, to_add, updated_note_ids = upsert_dia_notes(
                 client,
                 payload_notes,
-                reset_progress_on_update=args.reset_progress_on_update,
+                preserve_progress_on_update=args.preserve_progress_on_update,
             )
             imported = 0
             affected_note_ids = list(updated_note_ids)
@@ -828,7 +828,7 @@ def main() -> int:
                 imported = len(added_note_ids)
             print(
                 f"{STRUCTURED_VOCAB_MODEL} upsert: updated {updated_ct} note(s) "
-                f"(fields + tags, scheduling {'reset to new' if args.reset_progress_on_update else 'preserved'}), "
+                f"(fields + tags, scheduling {'preserved' if args.preserve_progress_on_update else 'reset to new'}), "
                 f"added {imported} new note(s) in deck '{args.deck}'."
             )
         else:

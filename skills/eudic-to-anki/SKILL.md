@@ -85,7 +85,7 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
   - `python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o <ABS_TEMP_DIR>/coach_batch_01.json`
 - Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types, missing IPA/example/collocations/english_definition, weak English definitions, long/explanatory meanings, missing POS markers, missing `part_of_speech`, all-placeholder roots, or suspicious single-letter words).
 - Run `ankiconnect_import.py --dry-run --verify-required-fields` before the real import, then run the real import with `--require-audio --verify-required-fields` and spot-check several notes in Anki, especially `音标`、`释义`、`英英`、`词根`、`例句`、`常用搭配`、`发音`.
-- `--dia-upsert` preserves existing Anki scheduling/progress by default. Only use `--reset-progress-on-update` when the user explicitly wants updated cards reset to new.
+- `--dia-upsert` resets existing Anki cards to new by default when updating. Only add `--preserve-progress-on-update` when the user explicitly says not to reset learning progress.
 - After a successful import, `ankiconnect_import.py` runs Anki sync by default; pass `--no-sync` to skip.
 - If validation fails (especially `root` format), regenerate only the failed batch/words and re-run validator before merge/import.
 

@@ -22,7 +22,7 @@
 - 刷新已存在卡片：在导入命令加 `--dia-upsert`
 - 音频为必填：真实导入必须带 `--require-audio`，并使用 `--audio-provider command` 或 `--audio-provider existing` 生成/保留 `[sound:...]`。
 - 导入后字段校验：真实导入加 `--verify-required-fields`，会回读 Anki note 并检查 `音标/释义/英英/词根/例句/常用搭配/发音`。
-- `--dia-upsert` 默认只更新字段和标签，保留已有卡片的学习进度；只有显式加 `--reset-progress-on-update` 时才把相关卡片重置为新卡。
+- `--dia-upsert` 默认更新字段和标签，并把已有卡片重置为新卡；只有用户明确要求“不要重置学习进度”时，才加 `--preserve-progress-on-update` 保留学习进度。
 - 执行前先 dry-run，执行后抽查 Anki 实际字段。
 - 其中 `<ABS_TEMP_DIR>` 代表展开后的真实绝对目录，例如 `/Users/alice/Documents/eudic-to-anki-temp`
 
