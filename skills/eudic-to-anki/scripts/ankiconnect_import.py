@@ -132,8 +132,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             f"{STRUCTURED_VOCAB_MODEL} only: match existing notes in this deck by the 单词 field, "
-            "update fields and tags, then forgetCards so scheduling resets to new. "
+            "then update fields and tags while preserving scheduling/progress. "
             "Words appearing multiple times in the input keep the last payload per word."
+        ),
+    )
+    parser.add_argument(
+        "--reset-progress-on-update",
+        action="store_true",
+        help=(
+            f"{STRUCTURED_VOCAB_MODEL} --dia-upsert only: after updating existing notes, "
+            "forget their cards so scheduling resets to new. Off by default."
         ),
     )
     parser.add_argument(
@@ -647,8 +655,10 @@ def dedupe_dia_payloads_last_wins(payloads: list[dict[str, Any]]) -> list[dict[s
 def upsert_dia_notes(
     client: AnkiConnectClient,
     payloads: list[dict[str, Any]],
+    *,
+    reset_progress_on_update: bool,
 ) -> tuple[int, int, list[dict[str, Any]], list[int]]:
-    """Update existing notes (and reset cards to new) or collect payloads to add."""
+    """Update existing notes or collect payloads to add."""
     to_add: list[dict[str, Any]] = []
     updated_note_ids: list[int] = []
     updated_notes = 0
@@ -668,12 +678,13 @@ def upsert_dia_notes(
                         "tags": payload["tags"],
                     },
                 )
-                infos = client.invoke("notesInfo", notes=[nid])
-                card_ids: list[int] = []
-                for info in infos or []:
-                    card_ids.extend(info.get("cards") or [])
-                if card_ids:
-                    client.invoke("forgetCards", cards=card_ids)
+                if reset_progress_on_update:
+                    infos = client.invoke("notesInfo", notes=[nid])
+                    card_ids: list[int] = []
+                    for info in infos or []:
+                        card_ids.extend(info.get("cards") or [])
+                    if card_ids:
+                        client.invoke("forgetCards", cards=card_ids)
             updated_notes += len(nids)
         else:
             to_add.append(payload)
@@ -720,6 +731,8 @@ def main() -> int:
             raise AnkiImportError(
                 f"--dia-upsert is only supported with --model {STRUCTURED_VOCAB_MODEL}."
             )
+        if args.reset_progress_on_update and not args.dia_upsert:
+            raise AnkiImportError("--reset-progress-on-update requires --dia-upsert.")
         if (args.require_audio or args.verify_required_fields) and args.model != STRUCTURED_VOCAB_MODEL:
             raise AnkiImportError(
                 f"--require-audio/--verify-required-fields are only supported with --model {STRUCTURED_VOCAB_MODEL}."
@@ -780,8 +793,10 @@ def main() -> int:
                         would_add += 1
                 print(
                     f"{STRUCTURED_VOCAB_MODEL} upsert dry-run: {would_update} existing note(s) would update "
-                    f"and reset to new; {would_add} new note(s) would be added."
+                    f"with scheduling preserved; {would_add} new note(s) would be added."
                 )
+                if args.reset_progress_on_update and would_update:
+                    print("Reset-on-update is enabled: existing note cards would be reset to new.")
             elif skipped_duplicates:
                 print(f"Would skip {skipped_duplicates} duplicate notes.")
             if payload_notes:
@@ -799,7 +814,11 @@ def main() -> int:
             return 0
 
         if args.dia_upsert:
-            updated_ct, _pending_add_ct, to_add, updated_note_ids = upsert_dia_notes(client, payload_notes)
+            updated_ct, _pending_add_ct, to_add, updated_note_ids = upsert_dia_notes(
+                client,
+                payload_notes,
+                reset_progress_on_update=args.reset_progress_on_update,
+            )
             imported = 0
             affected_note_ids = list(updated_note_ids)
             if to_add:
@@ -808,7 +827,8 @@ def main() -> int:
                 affected_note_ids.extend(added_note_ids)
                 imported = len(added_note_ids)
             print(
-                f"{STRUCTURED_VOCAB_MODEL} upsert: updated {updated_ct} note(s) (fields + tags, cards reset to new), "
+                f"{STRUCTURED_VOCAB_MODEL} upsert: updated {updated_ct} note(s) "
+                f"(fields + tags, scheduling {'reset to new' if args.reset_progress_on_update else 'preserved'}), "
                 f"added {imported} new note(s) in deck '{args.deck}'."
             )
         else:
