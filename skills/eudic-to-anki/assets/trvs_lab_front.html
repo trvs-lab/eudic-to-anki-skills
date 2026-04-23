@@ -8,19 +8,306 @@
 </div>
 
 <script>
-var wordText = document.querySelector("#word").innerText.trim();
-var instance = document.querySelector("#instance");
+(function() {
+  var word = document.querySelector("#word");
+  var instance = document.querySelector("#instance");
 
-if (instance.innerHTML.trim() === '') {
-  instance.classList.add("hide");
-} else {
-  var escapedWordText = wordText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  var regex = new RegExp(`\\b${escapedWordText}\\b`, "gi");
-  instance.innerHTML = instance.innerHTML.replace(regex, function(matchedWord) {
-    if (matchedWord.startsWith('<b><u>') && matchedWord.endsWith('</u></b>')) {
-      return matchedWord;
+  if (!word || !instance) {
+    return;
+  }
+
+  var wordText = word.innerText.trim();
+
+  if (instance.textContent.trim() === '') {
+    instance.classList.add("hide");
+    return;
+  }
+
+  var highlightForms = buildHighlightForms(wordText);
+  if (!highlightForms.length) {
+    return;
+  }
+
+  var pattern = highlightForms
+    .sort(function(a, b) { return b.length - a.length; })
+    .map(escapeRegExp)
+    .join("|");
+  var regex = new RegExp("\\b(?:" + pattern + ")\\b", "gi");
+
+  highlightTextNodes(instance, regex);
+
+  function buildHighlightForms(rawWord) {
+    var forms = {};
+    var candidates = rawWord
+      .toLowerCase()
+      .split(/[;,/|]/)
+      .map(cleanHeadword)
+      .filter(Boolean);
+
+    addForm(forms, cleanHeadword(rawWord));
+
+    candidates.forEach(function(candidate) {
+      addEnglishForms(candidate, forms);
+    });
+
+    return Object.keys(forms);
+  }
+
+  function cleanHeadword(value) {
+    return value
+      .replace(/\[[^\]]*\]|\([^)]*\)/g, " ")
+      .replace(/^to\s+/i, "")
+      .replace(/^[^a-z]+|[^a-z]+$/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function addEnglishForms(base, forms) {
+    if (!base) {
+      return;
     }
-    return `<b><u>${matchedWord}</u></b>`;
-  });
-}
+
+    addForm(forms, base);
+
+    if (base.indexOf(" ") !== -1 || base.indexOf("-") !== -1) {
+      return;
+    }
+
+    addIrregularForms(base, forms);
+
+    if (base.length < 3) {
+      return;
+    }
+
+    addVerbForms(base, forms);
+    addPluralForms(base, forms);
+  }
+
+  function addVerbForms(base, forms) {
+    var last = base.charAt(base.length - 1);
+    var beforeLast = base.charAt(base.length - 2);
+
+    if (/[^aeiou]y$/.test(base)) {
+      addForm(forms, base.slice(0, -1) + "ies");
+      addForm(forms, base.slice(0, -1) + "ied");
+      addForm(forms, base + "ing");
+      return;
+    }
+
+    if (/ie$/.test(base)) {
+      addForm(forms, base + "s");
+      addForm(forms, base + "d");
+      addForm(forms, base.slice(0, -2) + "ying");
+      return;
+    }
+
+    if (/e$/.test(base)) {
+      addForm(forms, base + "s");
+      addForm(forms, base + "d");
+      addForm(forms, base.slice(0, -1) + "ing");
+      return;
+    }
+
+    if (/c$/.test(base)) {
+      addForm(forms, base + "s");
+      addForm(forms, base + "ked");
+      addForm(forms, base + "king");
+      return;
+    }
+
+    if (/(s|x|z|ch|sh|o)$/.test(base)) {
+      addForm(forms, base + "es");
+    } else {
+      addForm(forms, base + "s");
+    }
+
+    addForm(forms, base + "ed");
+    addForm(forms, base + "ing");
+
+    if (
+      isConsonant(last) &&
+      isVowel(beforeLast) &&
+      isConsonant(base.charAt(base.length - 3)) &&
+      !/[wxy]$/.test(base)
+    ) {
+      addForm(forms, base + last + "ed");
+      addForm(forms, base + last + "ing");
+    }
+  }
+
+  function addPluralForms(base, forms) {
+    if (/[^aeiou]y$/.test(base)) {
+      addForm(forms, base.slice(0, -1) + "ies");
+    } else if (/(s|x|z|ch|sh)$/.test(base)) {
+      addForm(forms, base + "es");
+    } else if (/fe?$/.test(base)) {
+      addForm(forms, base.replace(/fe?$/, "ves"));
+    } else {
+      addForm(forms, base + "s");
+    }
+  }
+
+  function addIrregularForms(base, forms) {
+    var irregulars = {
+      "be": "am are is was were been being",
+      "bear": "bore born borne bearing bears",
+      "beat": "beaten beating beats",
+      "become": "became become becoming becomes",
+      "begin": "began begun beginning begins",
+      "bend": "bent bending bends",
+      "break": "broke broken breaking breaks",
+      "bring": "brought bringing brings",
+      "build": "built building builds",
+      "buy": "bought buying buys",
+      "catch": "caught catching catches",
+      "choose": "chose chosen choosing chooses",
+      "come": "came come coming comes",
+      "cost": "cost costing costs",
+      "cut": "cut cutting cuts",
+      "deal": "dealt dealing deals",
+      "dig": "dug digging digs",
+      "do": "did done doing does",
+      "draw": "drew drawn drawing draws",
+      "drink": "drank drunk drinking drinks",
+      "drive": "drove driven driving drives",
+      "eat": "ate eaten eating eats",
+      "fall": "fell fallen falling falls",
+      "feel": "felt feeling feels",
+      "find": "found finding finds",
+      "fly": "flew flown flying flies",
+      "forget": "forgot forgotten forgetting forgets",
+      "get": "got gotten getting gets",
+      "give": "gave given giving gives",
+      "go": "went gone going goes",
+      "grow": "grew grown growing grows",
+      "have": "had having has",
+      "hear": "heard hearing hears",
+      "hold": "held holding holds",
+      "keep": "kept keeping keeps",
+      "know": "knew known knowing knows",
+      "leave": "left leaving leaves",
+      "lend": "lent lending lends",
+      "let": "let letting lets",
+      "lie": "lay lain lying lies",
+      "lose": "lost losing loses",
+      "make": "made making makes",
+      "mean": "meant meaning means",
+      "meet": "met meeting meets",
+      "pay": "paid paying pays",
+      "put": "put putting puts",
+      "read": "read reading reads",
+      "ride": "rode ridden riding rides",
+      "ring": "rang rung ringing rings",
+      "rise": "rose risen rising rises",
+      "run": "ran run running runs",
+      "say": "said saying says",
+      "see": "saw seen seeing sees",
+      "sell": "sold selling sells",
+      "send": "sent sending sends",
+      "set": "set setting sets",
+      "show": "showed shown showing shows",
+      "sit": "sat sitting sits",
+      "sleep": "slept sleeping sleeps",
+      "speak": "spoke spoken speaking speaks",
+      "spend": "spent spending spends",
+      "stand": "stood standing stands",
+      "take": "took taken taking takes",
+      "teach": "taught teaching teaches",
+      "tell": "told telling tells",
+      "think": "thought thinking thinks",
+      "throw": "threw thrown throwing throws",
+      "understand": "understood understanding understands",
+      "wear": "wore worn wearing wears",
+      "win": "won winning wins",
+      "write": "wrote written writing writes"
+    };
+
+    if (!irregulars[base]) {
+      return;
+    }
+
+    irregulars[base].split(/\s+/).forEach(function(form) {
+      addForm(forms, form);
+    });
+  }
+
+  function addForm(forms, value) {
+    var form = cleanHeadword(value);
+    if (form) {
+      forms[form] = true;
+    }
+  }
+
+  function isVowel(value) {
+    return /[aeiou]/.test(value);
+  }
+
+  function isConsonant(value) {
+    return /[bcdfghjklmnpqrstvwxyz]/.test(value);
+  }
+
+  function highlightTextNodes(root, regex) {
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(node) {
+        regex.lastIndex = 0;
+        if (!node.nodeValue.trim() || shouldSkipNode(node, root) || !regex.test(node.nodeValue)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var nodes = [];
+    var node;
+
+    while ((node = walker.nextNode())) {
+      nodes.push(node);
+    }
+
+    nodes.forEach(function(textNode) {
+      wrapMatches(textNode, regex);
+    });
+  }
+
+  function shouldSkipNode(node, root) {
+    var parent = node.parentNode;
+
+    while (parent && parent !== root) {
+      if (/^(B|U|SCRIPT|STYLE)$/i.test(parent.nodeName)) {
+        return true;
+      }
+      parent = parent.parentNode;
+    }
+
+    return false;
+  }
+
+  function wrapMatches(textNode, regex) {
+    var source = textNode.nodeValue;
+    var fragment = document.createDocumentFragment();
+    var lastIndex = 0;
+
+    regex.lastIndex = 0;
+    source.replace(regex, function(match, offset) {
+      fragment.appendChild(document.createTextNode(source.slice(lastIndex, offset)));
+      fragment.appendChild(createHighlightNode(match));
+      lastIndex = offset + match.length;
+      return match;
+    });
+    fragment.appendChild(document.createTextNode(source.slice(lastIndex)));
+
+    textNode.parentNode.replaceChild(fragment, textNode);
+  }
+
+  function createHighlightNode(text) {
+    var bold = document.createElement("b");
+    var underline = document.createElement("u");
+    underline.textContent = text;
+    bold.appendChild(underline);
+    return bold;
+  }
+
+  function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+})();
 </script>

@@ -9,6 +9,24 @@
 python3 scripts/ankiconnect_import.py --ping
 ```
 
+- 同步内置 `TRVS-Lab` 模板和样式到 Anki：
+
+```bash
+python3 scripts/sync_trvs_lab_model.py
+```
+
+- 只同步正反面模板，不改样式：
+
+```bash
+python3 scripts/sync_trvs_lab_model.py --templates-only
+```
+
+- 如果 Anki 里还没有 `TRVS-Lab` 笔记类型，可用内置 spec 创建：
+
+```bash
+python3 scripts/sync_trvs_lab_model.py --create-if-missing
+```
+
 - 导入前预演：
 
 ```bash

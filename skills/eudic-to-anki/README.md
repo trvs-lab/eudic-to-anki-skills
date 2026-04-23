@@ -26,6 +26,7 @@ npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 - 环境检查：`bash scripts/check_env.sh`
 - 列分类：`python3 scripts/eudic_export.py --list-categories`
 - Anki 连通性：`python3 scripts/ankiconnect_import.py --ping`
+- 同步内置 TRVS-Lab 模板到 Anki：`python3 scripts/sync_trvs_lab_model.py`
 - 导入预演：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run`
 - 真实导入：加 `--require-audio --verify-required-fields`，并用 audio provider 生成/保留 `发音` 字段。
 - 音频试跑：`python3 scripts/edge_tts_runner.py --text "semantic" --output /tmp/semantic.mp3`
