@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build TRVS-Lab-ready coach JSON from Eudic CSV: word list + metadata (tags, source).
 
-All eight coach fields—including **`pronunciation`**—are written by the **executing agent** per
+All coach fields—including **`pronunciation`** and **`learning_priority`**—are written by the executing agent per
 `word-coach-json-prompt.md` (`eudic-to-anki` skill default: **no** Eudic `phon` prefill
 or pronunciation patch). This script emits placeholders only, plus optional `--eudic-phon-for-ipa`
 / `--patch-pronunciations-in-json` for **optional manual** use, and built-in COACH rows for a few
@@ -112,6 +112,7 @@ def note_words_only(
         "example": "",
         "collocations": [],
         "audio_html": "",
+        "learning_priority": "",
         "source": source,
         "source_context": source_context,
         "tags": tags,
@@ -150,6 +151,7 @@ def note_from_csv_row_with_coach(
         "example": example,
         "collocations": collocations,
         "audio_html": "",
+        "learning_priority": str(base.get("learning_priority") or "focus"),
         "source": source,
         "source_context": source_context,
         "tags": tags,
@@ -277,7 +279,10 @@ def main() -> int:
     parser.add_argument(
         "--batch-date",
         default="",
-        help="If set, appended to tags (e.g. 2026-04-09).",
+        help=(
+            "Deprecated compatibility option. Accepted but no longer appended to tags, "
+            "to avoid creating one Anki tag per import date."
+        ),
     )
     parser.add_argument(
         "--eudic-words-only",
@@ -350,9 +355,7 @@ def main() -> int:
             if not w or w in seen:
                 continue
             seen.add(w)
-            tags = ["english", "vocab", "eudic"]
-            if args.batch_date:
-                tags.append(args.batch_date)
+            tags: list[str] = []
             base = None if args.eudic_words_only else COACH.get(w)
             if base:
                 notes.append(

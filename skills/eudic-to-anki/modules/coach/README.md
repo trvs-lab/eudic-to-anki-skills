@@ -7,6 +7,9 @@
 - 由 agent 生成 `pronunciation/part_of_speech/meaning/english_definition/root/example/collocations` 等字段。
 - 每个 note 都必须带 `part_of_speech`，格式使用简短词性缩写，如 `n.`、`vt.`、`vi.`、`adj.`、`adv.`。
 - `meaning` 数组中的每一条中文释义都必须以词性缩写开头；不要输出裸中文义。
+- 每个 note 都必须带 `learning_priority`，只能是 `focus`、`passive`、`ignore`。分级的第一目标是服务用户听说读写的真实流畅度，并兼顾 20000 词汇量和 IELTS 8+：需要主动说/写或显著提升理解的词用 `focus`，只需读/听识别的词用 `passive`，对语言能力几乎无增益或明显噪声的词用 `ignore`；拿不准时默认 `passive`。
+- 多义词不能只按最具体的物件义判断；若常见义项中包含高迁移的抽象义、动词义、评论/修辞义或高价值搭配，并能提升表达精度或阅读理解，则标 `focus`（如 `foil`）；稳定具体概念词通常标 `passive`（如 `carbon dioxide`）。
+- 不要按词性直接分级。名词、动词、形容词、副词都可能是 `focus` 或 `passive`；最终只看它是否提升真实听说读写流畅度，以及是否值得主动输出。
 - `pronunciation` 必须是完整美式 IPA，不能空；不要依赖欧路 `phon` 的批量拷贝。
 - `meaning` 必须由 agent 重新生成，写成简洁、通俗、像词典标签的中文释义；不要直接复制欧路 `exp`，也不要把解释段落塞进中文释义。
 - `english_definition` 必须生成，风格接近 vocabulary.com：简洁、通俗、解释型，用日常英文给学习者讲清楚词义；不要只写同义词、不要混中文、不要写长篇百科定义。

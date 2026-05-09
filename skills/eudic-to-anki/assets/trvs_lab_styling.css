@@ -24,6 +24,7 @@ b {
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.15);
   color: #333333;
   text-align: left;
+  position: relative;
 }
 
 .items + .items {
@@ -33,6 +34,28 @@ b {
 .items {
   margin: 0 14px;
   padding: 10px 0 8px 0;
+}
+
+.priority-row {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+}
+
+.priority-marker {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  color: rgba(0, 0, 0, 0.46);
+  opacity: 0.4;
 }
 
 #front {
@@ -69,6 +92,7 @@ b {
 .phenic {
   color: rgba(0, 0, 0, 0.6);
   font-size: 19px;
+  padding-right: 24px;
 }
 
 #instance {

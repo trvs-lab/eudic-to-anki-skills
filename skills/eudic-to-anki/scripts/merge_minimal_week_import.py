@@ -14,7 +14,7 @@ import importlib.util
 import json
 from pathlib import Path
 
-from coach_fields import fuse_pos_into_meaning
+from coach_fields import fuse_pos_into_meaning, normalize_learning_priority
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
@@ -57,6 +57,13 @@ def note_pos(note: dict) -> str:
         value = note.get(key)
         if value not in (None, ""):
             return str(value).strip()
+    return ""
+
+def _note_learning_priority(note: dict) -> str:
+    for key in ("learning_priority", "priority", "学习优先级"):
+        value = note.get(key)
+        if value not in (None, ""):
+            return normalize_learning_priority(value)
     return ""
 
 
@@ -105,7 +112,7 @@ def main() -> int:
                 raise SystemExit(f"Missing coach entry for word: {w!r}")
             c = coach[w]
             meta = tags_meta.get(
-                w, {"source": "eudic cloud", "tags": ["english", "vocab", "eudic"]}
+                w, {"source": "eudic cloud", "tags": []}
             )
             ipa = phon.get(w, "")
             raw_meaning = c.get("meaning") or []
@@ -126,6 +133,7 @@ def main() -> int:
                     "example": c["example"],
                     "collocations": c["collocations"],
                     "audio_html": "",
+                    "learning_priority": _note_learning_priority(c),
                     "source": meta["source"],
                     "source_context": meta.get("source_context") or source_contexts.get(w, ""),
                     "tags": meta["tags"],

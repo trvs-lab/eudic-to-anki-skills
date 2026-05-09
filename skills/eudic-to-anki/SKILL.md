@@ -56,7 +56,7 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 3. Export words:
   - `python3 scripts/eudic_export.py --all-categories --start-date <D> --end-date <D> --format csv --output <ABS_TEMP_DIR>/_day_<D>_export.csv`
 4. Build placeholder + author coach:
-  - `python3 scripts/build_dia_json_from_csv.py --csv <ABS_TEMP_DIR>/_day_<D>_export.csv --output <ABS_TEMP_DIR>/_day_<D>_partial.json --batch-date <D> --eudic-words-only`
+  - `python3 scripts/build_dia_json_from_csv.py --csv <ABS_TEMP_DIR>/_day_<D>_export.csv --output <ABS_TEMP_DIR>/_day_<D>_partial.json --eudic-words-only`
   - The partial JSON preserves Eudic `context_line` as `source_context`; use it when authoring examples. Agent writes refined coach JSON per `references/word-coach-json-prompt.md`, then merge (single file or batches + `scripts/merge_coach_with_partial.py`).
 5. Validate:
   - `python3 scripts/validate_trvs_coach_json.py <ABS_TEMP_DIR>/_day_<D>_import.json`
@@ -72,6 +72,11 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 
 - Agent authors coach content; do not bulk-copy Eudic `exp`/`phon` into coach fields by default.
 - Coach JSON must preserve POS explicitly: include `part_of_speech` on every note, and keep POS markers at the start of each Chinese `meaning` line.
+- Coach JSON must classify every note with `learning_priority` for the user's core goal: fluent listening, speaking, reading, and writing, while supporting 20000-vocab / IELTS 8+. Use `focus` for words worth active speaking/writing or high-impact comprehension, `passive` for recognition-only words, and `ignore` for noise or words with little real fluency value. When unsure, choose `passive`.
+- For polysemous words, classify by the highest-transfer common sense, not only the most concrete sense: common abstract, verbal, rhetorical, or high-value collocational senses that improve expression or comprehension should make the word `focus` (e.g. `foil`); stable concrete concept terms usually remain `passive` (e.g. `carbon dioxide`).
+- Do not classify by part of speech. Nouns, verbs, adjectives, and adverbs can all be `focus` or `passive`; judge only by real fluency value and whether the word is worth active output.
+- Anki import stores `learning_priority` in the `学习标记` field as symbols (`★`, `◇`, `×`) and stable tags (`priority::focus`, `priority::passive`, `priority::ignore`). The card template shows this only as a subtle back-side hint, never on the front.
+- The pipeline no longer adds static tags `english`, `vocab`, or `eudic`; only priority tags and user-supplied `--tag` values are kept.
 - Every final import note must have complete AmE IPA in `pronunciation`, a non-empty `example`, and at least two common `collocations`.
 - Chinese `meaning` must be regenerated as short, natural, dictionary-style Chinese labels. Do not paste Eudic `exp`, and do not write explanatory definitions such as `n. 由一个碳原子和两个氧原子组成的气体`; write `n. 二氧化碳` and put explanations in `english_definition`.
 - `english_definition` is required and must be a concise, friendly, explanatory learner definition in plain English, similar to vocabulary.com style; avoid bare synonyms, Chinese text, or long encyclopedia definitions.
@@ -83,8 +88,8 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 - For large lists, use batched subagents and validate each batch before merge.
 - If subagent output is base64, decode via:
   - `python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o <ABS_TEMP_DIR>/coach_batch_01.json`
-- Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types, missing IPA/example/collocations/english_definition, weak English definitions, long/explanatory meanings, missing POS markers, missing `part_of_speech`, all-placeholder roots, or suspicious single-letter words).
-- Run `ankiconnect_import.py --dry-run --verify-required-fields` before the real import, then run the real import with `--require-audio --verify-required-fields` and spot-check several notes in Anki, especially `音标`、`释义`、`英英`、`词根`、`例句`、`常用搭配`、`发音`.
+- Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types, missing IPA/example/collocations/english_definition, weak English definitions, long/explanatory meanings, missing POS markers, missing `part_of_speech`, invalid `learning_priority`, all-placeholder roots, or suspicious single-letter words).
+- Run `ankiconnect_import.py --dry-run --verify-required-fields` before the real import, then run the real import with `--require-audio --verify-required-fields` and spot-check several notes in Anki, especially `音标`、`释义`、`英英`、`词根`、`例句`、`常用搭配`、`发音`、`学习标记`.
 - `--dia-upsert` resets existing Anki cards to new by default when updating. Only add `--preserve-progress-on-update` when the user explicitly says not to reset learning progress.
 - After a successful import, `ankiconnect_import.py` runs Anki sync by default; pass `--no-sync` to skip.
 - If validation fails (especially `root` format), regenerate only the failed batch/words and re-run validator before merge/import.

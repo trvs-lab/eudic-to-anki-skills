@@ -707,6 +707,7 @@ def main():
                 "example": EX[i],
                 "collocations": c,
                 "audio_html": "",
+                "learning_priority": "focus",
             }
         )
 

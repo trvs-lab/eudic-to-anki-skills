@@ -1,10 +1,17 @@
-"""Shared helpers for TRVS-Lab coach JSON (meaning lines + optional legacy POS)."""
+"""Shared helpers for TRVS-Lab coach JSON."""
 
 from __future__ import annotations
 
 import re
 
 _POS_LEAD_RE = re.compile(r"^[a-z]{1,12}\.", re.I)
+
+LEARNING_PRIORITY_VALUES = ("focus", "passive", "ignore")
+LEARNING_PRIORITY_MARKERS = {
+    "focus": "★",
+    "passive": "◇",
+    "ignore": "×",
+}
 
 
 def meaning_line_has_pos_prefix(line: str) -> bool:
@@ -28,3 +35,14 @@ def fuse_pos_into_meaning(meaning_values: list[str], pos: str) -> list[str]:
     if not fused:
         return [pos_stripped] if pos_stripped else []
     return fused
+
+
+def normalize_learning_priority(value: object, *, default: str = "") -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return default
+    return text
+
+
+def learning_priority_marker(priority: str) -> str:
+    return LEARNING_PRIORITY_MARKERS.get(priority, "")

@@ -15,7 +15,12 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from coach_fields import fuse_pos_into_meaning
+from coach_fields import (
+    LEARNING_PRIORITY_VALUES,
+    fuse_pos_into_meaning,
+    learning_priority_marker,
+    normalize_learning_priority,
+)
 
 
 DEFAULT_ANKI_URL = "http://127.0.0.1:8765"
@@ -25,7 +30,8 @@ DEFAULT_MODEL = STRUCTURED_VOCAB_MODEL
 DEFAULT_AUDIO_FIELD = "发音"
 DEFAULT_AUDIO_FORMAT = "mp3"
 API_VERSION = 6
-TRVS_REQUIRED_FIELDS = ("音标", "释义", "英英", "词根", "例句", "常用搭配")
+STATIC_TAGS_TO_DROP = {"english", "vocab", "eudic"}
+TRVS_REQUIRED_FIELDS = ("音标", "释义", "英英", "词根", "例句", "常用搭配", "学习标记")
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
@@ -237,6 +243,10 @@ def connection_help(url: str) -> str:
     )
 
 
+def filter_static_tags(tags: list[str]) -> list[str]:
+    return [tag for tag in tags if tag not in STATIC_TAGS_TO_DROP]
+
+
 def split_tags(value: Any) -> list[str]:
     if value is None:
         return []
@@ -331,6 +341,27 @@ def list_to_text(values: list[str], delimiter: str = "<br>") -> str:
     return delimiter.join(values)
 
 
+def note_learning_priority(note: dict[str, Any]) -> str:
+    for key in ("learning_priority", "priority", "学习优先级"):
+        value = note.get(key)
+        if value not in (None, ""):
+            priority = normalize_learning_priority(value)
+            if priority not in LEARNING_PRIORITY_VALUES:
+                raise AnkiImportError(
+                    "learning_priority must be one of "
+                    f"{', '.join(LEARNING_PRIORITY_VALUES)} (got {value!r})."
+                )
+            return priority
+    return "passive"
+
+
+def note_learning_marker(note: dict[str, Any]) -> str:
+    explicit = field_value(note, "学习标记", "learning_marker")
+    if explicit:
+        return explicit
+    return learning_priority_marker(note_learning_priority(note))
+
+
 def build_trvs_lab_fields(note: dict[str, Any], audio_html: str) -> dict[str, str]:
     """Map JSON / coach notes onto the TRVS-Lab note type (no standalone 词性 field)."""
     meaning_values = normalize_list(note.get("meaning") or note.get("释义"))
@@ -346,6 +377,7 @@ def build_trvs_lab_fields(note: dict[str, Any], audio_html: str) -> dict[str, st
         "例句": field_value(note, "例句", "example"),
         "常用搭配": list_to_text(collocation_values, "<br>"),
         "发音": audio_html or field_value(note, "发音", "audio_html"),
+        "学习标记": note_learning_marker(note),
     }
 
 
@@ -565,7 +597,10 @@ def note_to_anki_payload(
     audio_format: str,
     audio_voice: str,
 ) -> dict[str, Any]:
-    tags = sorted(set(global_tags + split_tags(note.get("tags"))))
+    tags = global_tags + split_tags(note.get("tags"))
+    if model == STRUCTURED_VOCAB_MODEL:
+        tags.append(f"priority::{note_learning_priority(note)}")
+    tags = sorted(set(filter_static_tags(tags)))
     audio_html = prepare_audio_html(
         note=note,
         client=client,
@@ -605,6 +640,9 @@ def ensure_model(
 ) -> None:
     models = client.invoke("modelNames")
     if model_name in models:
+        if ensure_if_missing and model_name == STRUCTURED_VOCAB_MODEL:
+            spec = load_model_spec(model_spec_path, model_name)
+            ensure_structured_model_schema(client, model_name, spec)
         return
     if not ensure_if_missing:
         raise AnkiImportError(
@@ -619,6 +657,60 @@ def ensure_model(
         cardTemplates=spec["card_templates"],
         css=spec["css"],
     )
+
+
+def _template_map_from_spec(spec: dict[str, Any]) -> dict[str, dict[str, str]]:
+    templates: dict[str, dict[str, str]] = {}
+    for template in spec.get("card_templates", []):
+        name = str(template.get("Name") or template.get("name") or "Card 1")
+        templates[name] = {
+            "Front": str(template.get("Front") or ""),
+            "Back": str(template.get("Back") or ""),
+        }
+    return templates
+
+
+def _model_templates_need_update(templates: Any) -> bool:
+    if not isinstance(templates, dict):
+        return True
+    for template in templates.values():
+        if isinstance(template, dict) and "{{学习标记}}" in str(template.get("Back") or ""):
+            return False
+    return True
+
+
+def _model_css_needs_update(styling: Any) -> bool:
+    if isinstance(styling, dict):
+        css = str(styling.get("css") or "")
+    else:
+        css = str(styling or "")
+    return ".priority-marker" not in css
+
+
+def ensure_structured_model_schema(
+    client: AnkiConnectClient, model_name: str, spec: dict[str, Any]
+) -> None:
+    current_fields = client.invoke("modelFieldNames", modelName=model_name)
+    if not isinstance(current_fields, list):
+        raise AnkiImportError(f"Could not inspect fields for Anki note type {model_name!r}.")
+
+    missing_fields = [field for field in spec["fields"] if field not in current_fields]
+    for field in missing_fields:
+        client.invoke("modelFieldAdd", modelName=model_name, fieldName=field)
+
+    templates = client.invoke("modelTemplates", modelName=model_name)
+    if missing_fields or _model_templates_need_update(templates):
+        client.invoke(
+            "updateModelTemplates",
+            model={"name": model_name, "templates": _template_map_from_spec(spec)},
+        )
+
+    styling = client.invoke("modelStyling", modelName=model_name)
+    if missing_fields or _model_css_needs_update(styling):
+        client.invoke(
+            "updateModelStyling",
+            model={"name": model_name, "css": str(spec.get("css") or "")},
+        )
 
 
 def _dia_word_search_term(word: str) -> str:

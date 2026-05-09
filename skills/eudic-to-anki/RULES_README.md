@@ -107,7 +107,7 @@ prefix_rule(
     decision = "allow",
     justification = "Allow placeholder note generation from exported CSV when running from skill root.",
     match = [
-        "python3 scripts/build_dia_json_from_csv.py --csv <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_export.csv --output <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_partial.json --batch-date 2026-05-01 --eudic-words-only",
+        "python3 scripts/build_dia_json_from_csv.py --csv <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_export.csv --output <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_partial.json --eudic-words-only",
     ],
 )
 
@@ -116,7 +116,7 @@ prefix_rule(
     decision = "allow",
     justification = "Allow placeholder note generation from exported CSV with absolute installed-skill path.",
     match = [
-        "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/build_dia_json_from_csv.py --csv <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_export.csv --output <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_partial.json --batch-date 2026-05-01 --eudic-words-only",
+        "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/build_dia_json_from_csv.py --csv <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_export.csv --output <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_partial.json --eudic-words-only",
     ],
 )
 

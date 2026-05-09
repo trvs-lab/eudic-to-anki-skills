@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from coach_fields import meaning_line_has_pos_prefix
+from coach_fields import LEARNING_PRIORITY_VALUES, meaning_line_has_pos_prefix
 
 REPLACEMENT = "\ufffd"
 # CJK + common extension blocks; root with morphological "+" must include a Chinese gloss (skill rule).
@@ -44,6 +44,7 @@ REQUIRED_KEYS = (
     "example",
     "collocations",
     "audio_html",
+    "learning_priority",
 )
 
 
@@ -277,6 +278,19 @@ def _check_note(
             f"note[{index}] word={w!r}: part_of_speech must look like a POS marker "
             f"(got {pos!r})"
         )
+
+    priority = note.get("learning_priority")
+    if not isinstance(priority, str):
+        errs.append(
+            f"note[{index}] word={w!r}: learning_priority must be a string "
+            f"with one of {', '.join(LEARNING_PRIORITY_VALUES)}"
+        )
+    elif priority.strip() not in LEARNING_PRIORITY_VALUES:
+        errs.append(
+            f"note[{index}] word={w!r}: learning_priority must be one of "
+            f"{', '.join(LEARNING_PRIORITY_VALUES)} (got {priority!r})"
+        )
+
 
     colls = note.get("collocations")
     if colls is None:

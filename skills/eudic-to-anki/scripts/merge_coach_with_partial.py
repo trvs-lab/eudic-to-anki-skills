@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from coach_fields import fuse_pos_into_meaning
+from coach_fields import fuse_pos_into_meaning, normalize_learning_priority
 
 
 def _normalize_list(value: object) -> list[str]:
@@ -22,6 +22,13 @@ def _note_pos(note: dict) -> str:
         value = note.get(key)
         if value not in (None, ""):
             return str(value).strip()
+    return ""
+
+def _note_learning_priority(note: dict) -> str:
+    for key in ("learning_priority", "priority", "学习优先级"):
+        value = note.get(key)
+        if value not in (None, ""):
+            return normalize_learning_priority(value)
     return ""
 
 
@@ -71,6 +78,7 @@ def main() -> int:
                 "example": c.get("example", ""),
                 "collocations": c.get("collocations", []),
                 "audio_html": c.get("audio_html", ""),
+                "learning_priority": _note_learning_priority(c),
                 "source": m.get("source"),
                 "source_context": m.get("source_context", ""),
                 "tags": m.get("tags"),

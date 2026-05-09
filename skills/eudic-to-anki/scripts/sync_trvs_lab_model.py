@@ -127,7 +127,7 @@ def sync_model_styling(client: AnkiConnectClient, model_name: str, spec: dict[st
     client.invoke("updateModelStyling", model={"name": model_name, "css": css})
 
 
-def warn_on_field_mismatch(
+def ensure_model_fields(
     client: AnkiConnectClient,
     model_name: str,
     expected_fields: list[str],
@@ -135,8 +135,9 @@ def warn_on_field_mismatch(
     current_fields = client.invoke("modelFieldNames", modelName=model_name)
     missing = [field for field in expected_fields if field not in current_fields]
     extra = [field for field in current_fields if field not in expected_fields]
-    if missing:
-        print(f"Warning: existing note type is missing bundled field(s): {', '.join(missing)}")
+    for field in missing:
+        client.invoke("modelFieldAdd", modelName=model_name, fieldName=field)
+        print(f"Added missing field to '{model_name}': {field}")
     if extra:
         print(f"Warning: existing note type has extra field(s): {', '.join(extra)}")
 
@@ -176,7 +177,7 @@ def main() -> int:
             create_model(client, spec)
             print(f"Created Anki note type '{args.model}' from bundled spec.")
         else:
-            warn_on_field_mismatch(client, args.model, list(spec.get("fields", [])))
+            ensure_model_fields(client, args.model, list(spec.get("fields", [])))
             if sync_templates:
                 sync_model_templates(client, args.model, spec)
                 print(f"Updated card template(s) for '{args.model}'.")
