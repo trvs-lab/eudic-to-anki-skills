@@ -9,7 +9,7 @@
 5. agent 按 `references/word-coach-json-prompt.md` 写入精修 coach；使用 partial 中的 `source_context` 处理例句；必要时分批并 merge。
 6. 内容自查：确认没有空音标、空英英释义、空例句、空搭配、整批 `root: "-"`、欧路 `exp` 直拷贝、过长/解释式中文释义、弱英英释义或单字母误选词。
 7. 校验：`python3 scripts/validate_trvs_coach_json.py <ABS_TEMP_DIR>/_day_<D>_import.json`
-8. dry-run：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/_day_<D>_import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run`
+8. dry-run：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/_day_<D>_import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run`。确认输出里的 target decks 为 `words::focus/passive/ignore` 分流。
 9. 导入（成功后默认同步 Anki；跳过同步加 `--no-sync`）：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/_day_<D>_import.json --deck words --create-deck --dia-upsert --require-audio --verify-required-fields --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text \"{word}\" --output \"{output}\"'`
 10. 导入后抽查 Anki 实际字段：`音标/释义/英英/词根/例句/常用搭配/发音`。
 11. 成功后清理：`bash scripts/cleanup_import_artifacts.sh`

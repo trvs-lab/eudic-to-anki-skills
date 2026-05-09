@@ -22,6 +22,7 @@ npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 ## 常用命令
 
 - 导入成功后 `ankiconnect_import.py` **默认**会调用 Anki 同步（AnkiConnect `sync`）；不需要同步时加 `--no-sync`。
+- `--deck words` 是 base deck；`TRVS-Lab` 默认按 `learning_priority` 分流到 `words::focus`、`words::passive`、`words::ignore`。`ignore` 不会默认挂起或跳过。
 - 最终导入前必须通过内容质量校验：完整 IPA、简洁中文释义、通俗解释型英英释义、来源句优先例句、词根词缀拆解、常用搭配。
 - 环境检查：`bash scripts/check_env.sh`
 - 列分类：`python3 scripts/eudic_export.py --list-categories`

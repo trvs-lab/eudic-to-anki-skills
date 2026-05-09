@@ -55,7 +55,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--deck",
         default=DEFAULT_DECK,
-        help=f"Deck name. Default: {DEFAULT_DECK}",
+        help=(
+            f"Base deck name. Default: {DEFAULT_DECK}. "
+            f"{STRUCTURED_VOCAB_MODEL} notes route to <deck>::focus/passive/ignore by default."
+        ),
+    )
+    parser.add_argument(
+        "--no-priority-decks",
+        action="store_true",
+        help=(
+            f"{STRUCTURED_VOCAB_MODEL} only: keep all notes in --deck instead of routing "
+            "by learning_priority to focus/passive/ignore subdecks."
+        ),
     )
     parser.add_argument(
         "--model",
@@ -137,8 +148,8 @@ def parse_args() -> argparse.Namespace:
         "--dia-upsert",
         action="store_true",
         help=(
-            f"{STRUCTURED_VOCAB_MODEL} only: match existing notes in this deck by the 单词 field, "
-            "update fields and tags, then reset existing cards to new by default. "
+            f"{STRUCTURED_VOCAB_MODEL} only: match existing notes in the target priority decks "
+            "by the 单词 field, update fields/tags/deck, then reset existing cards to new by default. "
             "Words appearing multiple times in the input keep the last payload per word."
         ),
     )
@@ -360,6 +371,56 @@ def note_learning_marker(note: dict[str, Any]) -> str:
     if explicit:
         return explicit
     return learning_priority_marker(note_learning_priority(note))
+
+
+def priority_decks_enabled(model: str, no_priority_decks: bool) -> bool:
+    return model == STRUCTURED_VOCAB_MODEL and not no_priority_decks
+
+
+def priority_deck_name(base_deck: str, priority: str) -> str:
+    deck = base_deck.strip() or DEFAULT_DECK
+    if deck.split("::")[-1] in LEARNING_PRIORITY_VALUES:
+        return deck
+    return f"{deck}::{priority}"
+
+
+def note_target_deck(
+    note: dict[str, Any],
+    *,
+    base_deck: str,
+    model: str,
+    use_priority_decks: bool,
+) -> str:
+    if use_priority_decks:
+        return priority_deck_name(base_deck, note_learning_priority(note))
+    return base_deck
+
+
+def priority_search_decks(
+    base_deck: str, target_deck: str, use_priority_decks: bool
+) -> list[str]:
+    decks = [target_deck]
+    if use_priority_decks:
+        decks = [
+            base_deck,
+            *[priority_deck_name(base_deck, p) for p in LEARNING_PRIORITY_VALUES],
+            target_deck,
+        ]
+    seen: set[str] = set()
+    unique_decks: list[str] = []
+    for deck in decks:
+        if deck not in seen:
+            unique_decks.append(deck)
+            seen.add(deck)
+    return unique_decks
+
+
+def deck_counts_text(payloads: list[dict[str, Any]]) -> str:
+    counts: dict[str, int] = {}
+    for payload in payloads:
+        deck = str(payload.get("deckName") or "")
+        counts[deck] = counts.get(deck, 0) + 1
+    return ", ".join(f"{deck}: {count}" for deck, count in sorted(counts.items()))
 
 
 def build_trvs_lab_fields(note: dict[str, Any], audio_html: str) -> dict[str, str]:
@@ -596,10 +657,14 @@ def note_to_anki_payload(
     audio_dir: Path,
     audio_format: str,
     audio_voice: str,
+    use_priority_decks: bool,
 ) -> dict[str, Any]:
     tags = global_tags + split_tags(note.get("tags"))
+    target_deck = deck
     if model == STRUCTURED_VOCAB_MODEL:
-        tags.append(f"priority::{note_learning_priority(note)}")
+        priority = note_learning_priority(note)
+        target_deck = priority_deck_name(deck, priority) if use_priority_decks else deck
+        tags.append(f"priority::{priority}")
     tags = sorted(set(filter_static_tags(tags)))
     audio_html = prepare_audio_html(
         note=note,
@@ -621,7 +686,7 @@ def note_to_anki_payload(
         fields = build_basic_fields(note, front_field, back_field)
 
     return {
-        "deckName": deck,
+        "deckName": target_deck,
         "modelName": model,
         "fields": fields,
         "tags": tags,
@@ -733,6 +798,20 @@ def find_dia_note_ids(
     return client.invoke("findNotes", query=query)
 
 
+def find_dia_note_ids_in_decks(
+    client: AnkiConnectClient, decks: list[str], model: str, word: str
+) -> list[int]:
+    note_ids: list[int] = []
+    seen: set[int] = set()
+    for deck in decks:
+        for nid in find_dia_note_ids(client, deck, model, word):
+            int_nid = int(nid)
+            if int_nid not in seen:
+                note_ids.append(int_nid)
+                seen.add(int_nid)
+    return note_ids
+
+
 def dedupe_dia_payloads_last_wins(payloads: list[dict[str, Any]]) -> list[dict[str, Any]]:
     order: list[str] = []
     by_word: dict[str, dict[str, Any]] = {}
@@ -748,6 +827,8 @@ def upsert_dia_notes(
     client: AnkiConnectClient,
     payloads: list[dict[str, Any]],
     *,
+    base_deck: str,
+    use_priority_decks: bool,
     preserve_progress_on_update: bool,
 ) -> tuple[int, int, list[dict[str, Any]], list[int]]:
     """Update existing notes or collect payloads to add."""
@@ -756,12 +837,19 @@ def upsert_dia_notes(
     updated_notes = 0
     for payload in payloads:
         word = payload["fields"]["单词"]
-        nids = find_dia_note_ids(
-            client, payload["deckName"], payload["modelName"], word
+        nids = find_dia_note_ids_in_decks(
+            client,
+            priority_search_decks(base_deck, payload["deckName"], use_priority_decks),
+            payload["modelName"],
+            word,
         )
         if nids:
             updated_note_ids.extend(int(nid) for nid in nids)
             for nid in nids:
+                infos = client.invoke("notesInfo", notes=[nid])
+                card_ids: list[int] = []
+                for info in infos or []:
+                    card_ids.extend(info.get("cards") or [])
                 client.invoke(
                     "updateNote",
                     note={
@@ -770,11 +858,9 @@ def upsert_dia_notes(
                         "tags": payload["tags"],
                     },
                 )
+                if card_ids:
+                    client.invoke("changeDeck", cards=card_ids, deck=payload["deckName"])
                 if not preserve_progress_on_update:
-                    infos = client.invoke("notesInfo", notes=[nid])
-                    card_ids: list[int] = []
-                    for info in infos or []:
-                        card_ids.extend(info.get("cards") or [])
                     if card_ids:
                         client.invoke("forgetCards", cards=card_ids)
             updated_notes += len(nids)
@@ -817,7 +903,6 @@ def main() -> int:
             ensure_if_missing=not args.no_ensure_model,
             model_spec_path=Path(args.model_spec),
         )
-        ensure_deck(client, args.deck, args.create_deck)
 
         if args.dia_upsert and args.model != STRUCTURED_VOCAB_MODEL:
             raise AnkiImportError(
@@ -833,6 +918,20 @@ def main() -> int:
         raw_notes = load_notes(input_path)
         if not raw_notes:
             raise AnkiImportError("Input file did not contain any notes.")
+
+        use_priority_decks = priority_decks_enabled(args.model, args.no_priority_decks)
+        target_decks = {
+            note_target_deck(
+                note,
+                base_deck=args.deck,
+                model=args.model,
+                use_priority_decks=use_priority_decks,
+            )
+            for note in raw_notes
+        }
+        decks_to_ensure = {args.deck, *target_decks}
+        for deck_name in sorted(decks_to_ensure):
+            ensure_deck(client, deck_name, args.create_deck)
 
         audio_dir = Path(args.audio_dir)
         payload_notes = [
@@ -850,6 +949,7 @@ def main() -> int:
                 audio_dir=audio_dir,
                 audio_format=args.audio_format,
                 audio_voice=args.audio_voice,
+                use_priority_decks=use_priority_decks,
             )
             for note in raw_notes
         ]
@@ -870,23 +970,32 @@ def main() -> int:
 
         if args.dry_run:
             print(
-                f"Validated {len(raw_notes)} notes for deck '{args.deck}' "
+                f"Validated {len(raw_notes)} notes for base deck '{args.deck}' "
                 f"with model '{args.model}'."
             )
+            if payload_notes:
+                print(f"Target decks: {deck_counts_text(payload_notes)}.")
             if args.dia_upsert:
                 would_update = 0
                 would_add = 0
                 for p in payload_notes:
                     w = p["fields"]["单词"]
-                    nids = find_dia_note_ids(client, args.deck, args.model, w)
+                    nids = find_dia_note_ids_in_decks(
+                        client,
+                        priority_search_decks(args.deck, p["deckName"], use_priority_decks),
+                        args.model,
+                        w,
+                    )
                     if nids:
                         would_update += len(nids)
                     else:
                         would_add += 1
                 print(
                     f"{STRUCTURED_VOCAB_MODEL} upsert dry-run: {would_update} existing note(s) would update "
-                    f"and reset to new; {would_add} new note(s) would be added."
+                    f"and move to the target deck if needed; {would_add} new note(s) would be added."
                 )
+                if would_update and not args.preserve_progress_on_update:
+                    print("Existing updated cards would be reset to new.")
                 if args.preserve_progress_on_update and would_update:
                     print("Preserve-progress-on-update is enabled: existing note scheduling would be preserved.")
             elif skipped_duplicates:
@@ -909,6 +1018,8 @@ def main() -> int:
             updated_ct, _pending_add_ct, to_add, updated_note_ids = upsert_dia_notes(
                 client,
                 payload_notes,
+                base_deck=args.deck,
+                use_priority_decks=use_priority_decks,
                 preserve_progress_on_update=args.preserve_progress_on_update,
             )
             imported = 0
@@ -921,15 +1032,15 @@ def main() -> int:
             print(
                 f"{STRUCTURED_VOCAB_MODEL} upsert: updated {updated_ct} note(s) "
                 f"(fields + tags, scheduling {'preserved' if args.preserve_progress_on_update else 'reset to new'}), "
-                f"added {imported} new note(s) in deck '{args.deck}'."
+                f"added {imported} new note(s). Target decks: {deck_counts_text(payload_notes)}."
             )
         else:
             note_ids = client.invoke("addNotes", notes=payload_notes)
             affected_note_ids = [int(note_id) for note_id in note_ids if note_id is not None]
             imported = len(affected_note_ids)
             print(
-                f"Imported {imported} notes into deck '{args.deck}' "
-                f"using model '{args.model}'."
+                f"Imported {imported} notes using model '{args.model}'. "
+                f"Target decks: {deck_counts_text(payload_notes)}."
             )
             if skipped_duplicates:
                 print(f"Skipped {skipped_duplicates} duplicate notes.")
