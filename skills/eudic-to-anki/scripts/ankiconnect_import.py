@@ -32,6 +32,7 @@ DEFAULT_AUDIO_FORMAT = "mp3"
 API_VERSION = 6
 STATIC_TAGS_TO_DROP = {"english", "vocab", "eudic"}
 TRVS_REQUIRED_FIELDS = ("音标", "释义", "英英", "词根", "例句", "常用搭配", "学习标记")
+ROOT_PLACEHOLDERS = {"-", "无"}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
@@ -348,6 +349,19 @@ def field_value(note: dict[str, Any], *keys: str) -> str:
     return ""
 
 
+def root_field_value(note: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        if key not in note or note[key] in (None, ""):
+            continue
+        text = str(note[key]).strip()
+        if text in ROOT_PLACEHOLDERS:
+            return text
+        normalized = normalize_text(note[key])
+        if normalized:
+            return normalized
+    return ""
+
+
 def list_to_text(values: list[str], delimiter: str = "<br>") -> str:
     return delimiter.join(values)
 
@@ -434,7 +448,7 @@ def build_trvs_lab_fields(note: dict[str, Any], audio_html: str) -> dict[str, st
         "音标": field_value(note, "音标", "pronunciation"),
         "释义": list_to_text(meaning_values, "；"),
         "英英": field_value(note, "英英", "english_definition", "definition_en"),
-        "词根": field_value(note, "词根", "root", "root_affix"),
+        "词根": root_field_value(note, "词根", "root", "root_affix"),
         "例句": field_value(note, "例句", "example"),
         "常用搭配": list_to_text(collocation_values, "<br>"),
         "发音": audio_html or field_value(note, "发音", "audio_html"),
@@ -463,13 +477,24 @@ def _field_text_value(raw: Any) -> str:
     return normalize_text(raw)
 
 
+def _root_field_text_value(raw: Any) -> str:
+    value = raw.get("value") if isinstance(raw, dict) else raw
+    text = str(value or "").strip()
+    if text in ROOT_PLACEHOLDERS:
+        return text
+    return normalize_text(value)
+
+
 def _missing_required_field_names(fields: dict[str, Any], require_audio: bool) -> list[str]:
     required = list(TRVS_REQUIRED_FIELDS)
     if require_audio:
         required.append("发音")
     missing: list[str] = []
     for name in required:
-        value = _field_text_value(fields.get(name))
+        if name == "词根":
+            value = _root_field_text_value(fields.get(name))
+        else:
+            value = _field_text_value(fields.get(name))
         if not value:
             missing.append(name)
             continue
