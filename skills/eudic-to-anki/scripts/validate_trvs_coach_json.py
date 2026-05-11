@@ -3,9 +3,9 @@
 
 Catches common agent pipeline failures: UTF-8 replacement char (U+FFFD) in IPA,
 malformed pronunciation slashes, empty IPA/examples/collocations, overly explanatory
-Chinese meanings, empty or weak English definitions, all-placeholder roots, suspicious
-single-letter words, and invalid JSON. Run after writing <notes-json>, before
-`ankiconnect_import.py`.
+Chinese meanings, empty or weak English definitions, whole-word pseudo-roots,
+all-placeholder roots, suspicious single-letter words, and invalid JSON. Run after
+writing <notes-json>, before `ankiconnect_import.py`.
 """
 
 from __future__ import annotations
@@ -29,11 +29,13 @@ _EXPLANATORY_MEANING_RE = re.compile(
     r"(由.+组成|组成的|用来|用于|指的是|指|一种|某种|过程|现象|领域|状态)",
     re.I,
 )
-_ROOT_SEGMENT_RE = re.compile(r"^[^+（）()]{1,40}（[^（）]{1,20}）$")
+_ROOT_SEGMENT_RE = re.compile(r"^([^+（）()]{1,40})（[^（）]{1,20}）$")
 _ROOT_BANNED_EN_RE = re.compile(
     r"\b(past\s*participle|participle|suffix|prefix|form|tense|with\s*-?ed)\b",
     re.I,
 )
+_ROOT_PLACEHOLDERS = {"-", "无"}
+_ROOT_TOKEN_CLEAN_RE = re.compile(r"[^a-z0-9]+", re.I)
 REQUIRED_KEYS = (
     "word",
     "pronunciation",
@@ -68,15 +70,20 @@ def _english_word_count(text: str) -> int:
     return len(_EN_WORD_RE.findall(text))
 
 
+def _root_token(text: str) -> str:
+    return _ROOT_TOKEN_CLEAN_RE.sub("", text.casefold())
+
+
 def _validate_root_value(root_val: str, word: str, index: int) -> list[str]:
     errs: list[str] = []
     rs = root_val.strip()
     if not rs:
         errs.append(
-            f"note[{index}] word={word!r}: root must not be empty (use '-' if unsplittable)"
+            f"note[{index}] word={word!r}: root must not be empty "
+            "(use '-' or '无' if unsplittable)"
         )
         return errs
-    if rs == "-":
+    if rs in _ROOT_PLACEHOLDERS:
         return errs
 
     if "(" in rs or ")" in rs:
@@ -100,11 +107,25 @@ def _validate_root_value(root_val: str, word: str, index: int) -> list[str]:
         )
         return errs
 
+    segment_forms: list[str] = []
     for p in parts:
-        if not _ROOT_SEGMENT_RE.match(p):
+        match = _ROOT_SEGMENT_RE.match(p)
+        if not match:
             errs.append(
                 f"note[{index}] word={word!r}: invalid root segment {p!r}; expected 形式（中文义）"
             )
+            continue
+        segment_forms.append(match.group(1).strip())
+    word_token = _root_token(word)
+    if (
+        len(segment_forms) == 1
+        and word_token
+        and _root_token(segment_forms[0]) == word_token
+    ):
+        errs.append(
+            f"note[{index}] word={word!r}: root repeats the whole word as its only segment "
+            f"({root_val!r}); use '-' or '无' if it cannot be usefully split"
+        )
     return errs
 
 
@@ -393,7 +414,7 @@ def main() -> int:
     parser.add_argument(
         "--allow-all-roots-dash",
         action="store_true",
-        help="Allow every note in the batch to use root '-' (normally means roots were not generated).",
+        help="Allow every note in the batch to use root '-'/'无' (normally means roots were not generated).",
     )
     args = parser.parse_args()
 
@@ -453,11 +474,12 @@ def main() -> int:
 
     if (
         root_values
-        and all(root == "-" for root in root_values)
+        and all(root in _ROOT_PLACEHOLDERS for root in root_values)
         and not args.allow_all_roots_dash
     ):
         all_errs.append(
-            "all notes have root '-'；regenerate root/affix breakdowns and use '-' only when a word is genuinely unsplittable"
+            "all notes have placeholder root '-'/'无'；regenerate root/affix breakdowns "
+            "and use placeholders only when a word is genuinely unsplittable"
         )
 
     if all_errs:

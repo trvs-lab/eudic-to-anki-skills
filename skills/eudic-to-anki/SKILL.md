@@ -84,13 +84,13 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 - `english_definition` is required and must be a concise, friendly, explanatory learner definition in plain English, similar to vocabulary.com style; avoid bare synonyms, Chinese text, or long encyclopedia definitions.
 - Audio is required in the final Anki note. The import command must generate or preserve a `[sound:...]` tag in `发音`; use `--require-audio --verify-required-fields` on the real import.
 - Prefer clear learner translations over stiff terms: e.g. `sprites` can be `n. 游戏里的小图；角色图`, and `interconnect` can be `v. 连在一起；互相关联`.
-- `root` must be generated for each word when useful, using `形式（中文义）+ ...`; use `-` only for genuinely unsplittable or unhelpful cases. A whole batch of `root: "-"` is invalid.
+- `root` must be generated for each word when useful, using `形式（中文义）+ ...`; use `-` (or `无`) for genuinely unsplittable or unhelpful cases. Never use the whole word itself as the only root segment, e.g. `crimson（深红）`; that should be `-`. A whole batch of placeholder roots is invalid.
 - Examples follow source-first rules: keep a complete, natural, not-too-long `source_context` sentence; shorten/rewrite noisy, truncated, or overly long source while preserving the original situation; invent a simple example only when no source sentence exists.
 - Treat suspicious one-letter entries other than `a`/`I` as likely export fragments and stop for review instead of importing blindly.
 - For large lists, use batched subagents and validate each batch before merge.
 - If subagent output is base64, decode via:
   - `python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o <ABS_TEMP_DIR>/coach_batch_01.json`
-- Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types, missing IPA/example/collocations/english_definition, weak English definitions, long/explanatory meanings, missing POS markers, missing `part_of_speech`, invalid `learning_priority`, all-placeholder roots, or suspicious single-letter words).
+- Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types, missing IPA/example/collocations/english_definition, weak English definitions, long/explanatory meanings, missing POS markers, missing `part_of_speech`, invalid `learning_priority`, whole-word pseudo-roots, all-placeholder roots, or suspicious single-letter words).
 - Run `ankiconnect_import.py --dry-run --verify-required-fields` before the real import, then run the real import with `--require-audio --verify-required-fields` and spot-check several notes in Anki, especially `音标`、`释义`、`英英`、`词根`、`例句`、`常用搭配`、`发音`、`学习标记`.
 - `--dia-upsert` searches the base deck and priority subdecks, so a word can move between `focus`、`passive`、`ignore` without duplicate notes. It resets existing Anki cards to new by default when updating. Only add `--preserve-progress-on-update` when the user explicitly says not to reset learning progress.
 - After a successful import, `ankiconnect_import.py` runs Anki sync by default; pass `--no-sync` to skip.
