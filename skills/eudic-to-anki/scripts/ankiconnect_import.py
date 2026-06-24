@@ -17,6 +17,10 @@ from typing import Any
 
 from coach_fields import (
     LEARNING_PRIORITY_VALUES,
+    TARGET_CHUNK_CLOZE_KEYS,
+    TARGET_CHUNK_KEYS,
+    TARGET_CHUNK_MEANING_KEYS,
+    first_text_field,
     fuse_pos_into_meaning,
     learning_priority_marker,
     normalize_learning_priority,
@@ -31,7 +35,17 @@ DEFAULT_AUDIO_FIELD = "发音"
 DEFAULT_AUDIO_FORMAT = "mp3"
 API_VERSION = 6
 STATIC_TAGS_TO_DROP = {"english", "vocab", "eudic"}
-TRVS_REQUIRED_FIELDS = ("音标", "释义", "英英", "词根", "例句", "常用搭配", "学习标记")
+TRVS_REQUIRED_FIELDS = (
+    "音标",
+    "释义",
+    "英英",
+    "词根",
+    "例句",
+    "常用搭配",
+    "目标短语块",
+    "短语块锚点",
+    "学习标记",
+)
 ROOT_PLACEHOLDERS = {"-", "无"}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -438,7 +452,7 @@ def deck_counts_text(payloads: list[dict[str, Any]]) -> str:
 
 
 def build_trvs_lab_fields(note: dict[str, Any], audio_html: str) -> dict[str, str]:
-    """Map JSON / coach notes onto the TRVS-Lab note type (no standalone 词性 field)."""
+    """Map JSON / coach notes onto the fresh-start TRVS-Lab phrase chunk note type."""
     meaning_values = normalize_list(note.get("meaning") or note.get("释义"))
     pos = field_value(note, "词性", "part_of_speech", "pos")
     meaning_values = fuse_pos_into_meaning(meaning_values, pos)
@@ -451,6 +465,9 @@ def build_trvs_lab_fields(note: dict[str, Any], audio_html: str) -> dict[str, st
         "词根": root_field_value(note, "词根", "root", "root_affix"),
         "例句": field_value(note, "例句", "example"),
         "常用搭配": list_to_text(collocation_values, "<br>"),
+        "目标短语块": first_text_field(note, TARGET_CHUNK_KEYS),
+        "短语块锚点": first_text_field(note, TARGET_CHUNK_MEANING_KEYS),
+        "短语块挖空": first_text_field(note, TARGET_CHUNK_CLOZE_KEYS),
         "发音": audio_html or field_value(note, "发音", "audio_html"),
         "学习标记": note_learning_marker(note),
     }
