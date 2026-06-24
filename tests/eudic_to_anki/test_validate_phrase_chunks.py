@@ -50,6 +50,19 @@ class ValidatePhraseChunkTests(unittest.TestCase):
         result = self.run_validator(valid_note())
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_accepts_valid_alias_only_phrase_chunk_note(self) -> None:
+        note = valid_note(
+            目标短语块="inflict damage on",
+            短语块锚点="造成严重伤害",
+            短语块挖空="The storm ____ serious damage on the town.",
+        )
+        del note["target_chunk"]
+        del note["target_chunk_meaning"]
+        del note["target_chunk_cloze"]
+
+        result = self.run_validator(note)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_requires_target_chunk(self) -> None:
         result = self.run_validator(valid_note(target_chunk=""))
         self.assertEqual(result.returncode, 1)
@@ -124,6 +137,21 @@ class ValidatePhraseChunkTests(unittest.TestCase):
                 result = self.run_validator(valid_note(**{field: value}))
                 self.assertEqual(result.returncode, 1)
                 self.assertIn(f"field {field!r} must be a string", result.stderr)
+
+    def test_rejects_non_string_target_chunk_alias_even_with_valid_canonical(self) -> None:
+        result = self.run_validator(valid_note(目标短语块=["inflict damage on"]))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("field '目标短语块' must be a string", result.stderr)
+
+    def test_rejects_non_string_target_chunk_meaning_alias_even_with_valid_canonical(self) -> None:
+        result = self.run_validator(valid_note(短语块锚点={"meaning": "造成严重伤害"}))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("field '短语块锚点' must be a string", result.stderr)
+
+    def test_rejects_non_string_target_chunk_cloze_alias_even_with_valid_canonical(self) -> None:
+        result = self.run_validator(valid_note(短语块挖空=123))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("field '短语块挖空' must be a string", result.stderr)
 
 
 if __name__ == "__main__":

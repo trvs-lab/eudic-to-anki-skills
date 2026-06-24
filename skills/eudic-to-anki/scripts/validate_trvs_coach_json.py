@@ -55,8 +55,6 @@ REQUIRED_KEYS = (
     "collocations",
     "audio_html",
     "learning_priority",
-    "target_chunk",
-    "target_chunk_meaning",
 )
 
 
@@ -146,20 +144,22 @@ def _first_phrase_chunk_text_field(
     word: str,
     errs: list[str],
 ) -> str:
+    first_text = ""
     for key in keys:
         value = note.get(key)
         if value is None:
             continue
         if not isinstance(value, str):
-            errs.append(
-                f"note[{index}] word={word!r}: field {key!r} must be a string "
-                f"(got {type(value).__name__})"
-            )
+            if value:
+                errs.append(
+                    f"note[{index}] word={word!r}: field {key!r} must be a string "
+                    f"(got {type(value).__name__})"
+                )
             continue
         text = value.strip()
-        if text:
-            return text
-    return ""
+        if text and not first_text:
+            first_text = text
+    return first_text
 
 
 def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -> list[str]:
