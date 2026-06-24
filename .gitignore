@@ -1,4 +1,5 @@
 .vercel/
+.superpowers/
 .DS_Store
 **/__pycache__/
 *.py[cod]
