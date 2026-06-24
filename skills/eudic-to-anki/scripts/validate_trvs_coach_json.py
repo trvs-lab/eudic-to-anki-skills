@@ -137,14 +137,14 @@ def _validate_root_value(root_val: str, word: str, index: int) -> list[str]:
     return errs
 
 
-def _first_phrase_chunk_text_field(
+def _phrase_chunk_text_fields(
     note: dict[str, Any],
     keys: tuple[str, ...],
     index: int,
     word: str,
     errs: list[str],
-) -> str:
-    first_text = ""
+) -> list[str]:
+    texts: list[str] = []
     for key in keys:
         value = note.get(key)
         if value is None:
@@ -156,23 +156,23 @@ def _first_phrase_chunk_text_field(
             )
             continue
         text = value.strip()
-        if text and not first_text:
-            first_text = text
-    return first_text
+        if text:
+            texts.append(text)
+    return texts
 
 
 def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -> list[str]:
     errs: list[str] = []
     priority = str(note.get("learning_priority") or "").strip()
-    target_chunk = _first_phrase_chunk_text_field(note, TARGET_CHUNK_KEYS, index, word, errs)
-    target_chunk_meaning = _first_phrase_chunk_text_field(
+    target_chunks = _phrase_chunk_text_fields(note, TARGET_CHUNK_KEYS, index, word, errs)
+    target_chunk_meanings = _phrase_chunk_text_fields(
         note,
         TARGET_CHUNK_MEANING_KEYS,
         index,
         word,
         errs,
     )
-    target_chunk_cloze = _first_phrase_chunk_text_field(
+    target_chunk_clozes = _phrase_chunk_text_fields(
         note,
         TARGET_CHUNK_CLOZE_KEYS,
         index,
@@ -180,30 +180,32 @@ def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -
         errs,
     )
 
-    if not target_chunk:
+    if not target_chunks:
         errs.append(f"note[{index}] word={word!r}: target_chunk must not be empty")
-    if not target_chunk_meaning:
+    if not target_chunk_meanings:
         errs.append(f"note[{index}] word={word!r}: target_chunk_meaning must not be empty")
-    elif _CHINESE_POS_PREFIX_RE.match(target_chunk_meaning) or len(target_chunk_meaning) > 24:
-        errs.append(
-            f"note[{index}] word={word!r}: target_chunk_meaning should be a phrase-level "
-            f"Chinese anchor, not a word-level dictionary gloss (got {target_chunk_meaning!r})"
-        )
+    for target_chunk_meaning in target_chunk_meanings:
+        if _CHINESE_POS_PREFIX_RE.match(target_chunk_meaning) or len(target_chunk_meaning) > 24:
+            errs.append(
+                f"note[{index}] word={word!r}: target_chunk_meaning should be a phrase-level "
+                f"Chinese anchor, not a word-level dictionary gloss (got {target_chunk_meaning!r})"
+            )
 
     if priority == "focus":
-        if not target_chunk_cloze:
+        if not target_chunk_clozes:
             errs.append(f"note[{index}] word={word!r}: focus notes need target_chunk_cloze")
-        elif not _CLOZE_BLANK_RE.search(target_chunk_cloze):
-            errs.append(
-                f"note[{index}] word={word!r}: target_chunk_cloze must contain a blank "
-                "such as ____"
-            )
-        elif _english_word_count(_CLOZE_BLANK_RE.sub(" ", target_chunk_cloze)) < 4:
-            errs.append(
-                f"note[{index}] word={word!r}: target_chunk_cloze must be a natural "
-                f"sentence, got {target_chunk_cloze!r}"
-            )
-    elif priority in {"passive", "ignore"} and target_chunk_cloze:
+        for target_chunk_cloze in target_chunk_clozes:
+            if not _CLOZE_BLANK_RE.search(target_chunk_cloze):
+                errs.append(
+                    f"note[{index}] word={word!r}: target_chunk_cloze must contain a blank "
+                    "such as ____"
+                )
+            elif _english_word_count(_CLOZE_BLANK_RE.sub(" ", target_chunk_cloze)) < 4:
+                errs.append(
+                    f"note[{index}] word={word!r}: target_chunk_cloze must be a natural "
+                    f"sentence, got {target_chunk_cloze!r}"
+                )
+    elif priority in {"passive", "ignore"} and target_chunk_clozes:
         errs.append(
             f"note[{index}] word={word!r}: {priority} notes must leave target_chunk_cloze empty"
         )

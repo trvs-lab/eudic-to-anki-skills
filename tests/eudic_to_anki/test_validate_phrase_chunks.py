@@ -110,6 +110,14 @@ class ValidatePhraseChunkTests(unittest.TestCase):
             result.stderr,
         )
 
+    def test_rejects_word_level_chunk_meaning_alias_even_with_valid_canonical(self) -> None:
+        result = self.run_validator(valid_note(短语块锚点="vt. 造成；使承受"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "target_chunk_meaning should be a phrase-level Chinese anchor",
+            result.stderr,
+        )
+
     def test_rejects_long_chunk_meaning(self) -> None:
         result = self.run_validator(
             valid_note(target_chunk_meaning="这是一个明显超过二十四个汉字的中文短语块锚点内容用于测试")
@@ -119,6 +127,42 @@ class ValidatePhraseChunkTests(unittest.TestCase):
             "target_chunk_meaning should be a phrase-level Chinese anchor",
             result.stderr,
         )
+
+    def test_rejects_long_chunk_meaning_alias_even_with_valid_canonical(self) -> None:
+        result = self.run_validator(
+            valid_note(短语块锚点="这是一个明显超过二十四个汉字的中文短语块锚点内容用于测试")
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "target_chunk_meaning should be a phrase-level Chinese anchor",
+            result.stderr,
+        )
+
+    def test_rejects_cloze_alias_without_blank_even_with_valid_canonical(self) -> None:
+        result = self.run_validator(valid_note(短语块挖空="The storm inflicted damage."))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("target_chunk_cloze must contain a blank", result.stderr)
+
+    def test_rejects_short_cloze_alias_even_with_valid_canonical(self) -> None:
+        result = self.run_validator(valid_note(短语块挖空="[blank] damage on town"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("target_chunk_cloze must be a natural sentence", result.stderr)
+
+    def test_rejects_non_focus_cloze_alias_even_when_canonical_empty(self) -> None:
+        for priority in ("passive", "ignore"):
+            with self.subTest(priority=priority):
+                result = self.run_validator(
+                    valid_note(
+                        learning_priority=priority,
+                        target_chunk_cloze="",
+                        短语块挖空="Fear can ____ judgment.",
+                    )
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    f"{priority} notes must leave target_chunk_cloze empty",
+                    result.stderr,
+                )
 
     def test_rejects_non_string_phrase_chunk_fields(self) -> None:
         cases: list[tuple[str, object]] = [
