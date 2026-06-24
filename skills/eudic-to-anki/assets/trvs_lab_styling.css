@@ -120,3 +120,37 @@ b {
   margin-top: 12px;
   animation: bounceInUp 0.3s cubic-bezier(.39, -0.35, .23, 1.51);
 }
+
+.chunk-head {
+  text-align: center;
+}
+
+.chunk-main {
+  display: inline-block;
+  font-family: courier, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.chunk-example,
+.recall-cloze {
+  white-space: pre-wrap;
+  font-size: 20px;
+  line-height: 1.45;
+}
+
+.chunk-meaning {
+  border-left: 4px solid rgba(0, 128, 128, 0.7);
+  color: rgba(0, 0, 0, 0.76);
+  font-weight: 700;
+  padding-left: 10px;
+}
+
+.chunk-answer .chunk-main {
+  font-size: 23px;
+}
+
+.collocations-field {
+  line-height: 1.45;
+}

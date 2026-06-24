@@ -8,14 +8,22 @@
     "词根",
     "例句",
     "常用搭配",
+    "目标短语块",
+    "短语块锚点",
+    "短语块挖空",
     "发音",
     "学习标记"
   ],
   "card_templates": [
     {
-      "Name": "Card 1",
-      "FrontPath": "trvs_lab_front.html",
-      "BackPath": "trvs_lab_back.html"
+      "Name": "Chunk Anchor",
+      "FrontPath": "trvs_lab_chunk_anchor_front.html",
+      "BackPath": "trvs_lab_chunk_anchor_back.html"
+    },
+    {
+      "Name": "Chunk Recall",
+      "FrontPath": "trvs_lab_chunk_recall_front.html",
+      "BackPath": "trvs_lab_chunk_recall_back.html"
     }
   ],
   "css_path": "trvs_lab_styling.css"

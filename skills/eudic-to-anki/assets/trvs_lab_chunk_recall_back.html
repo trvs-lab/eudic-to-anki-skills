@@ -1,0 +1,25 @@
+{{FrontSide}}
+<div class="section bounceInUp chunk-answer chunk-recall-answer">
+  <div class="items chunk-head">
+    <span class="chunk-main">{{目标短语块}}</span>
+    <span class="audio block">{{发音}}</span>
+  </div>
+  <div class="items phenic">{{音标}}</div>
+  <div class="items meaning-row"><span class="type">{{释义}}</span></div>
+  <div class="items collocations-field recall-collocations">{{常用搭配}}</div>
+</div>
+
+<script>
+(function() {
+  var field = document.querySelector(".recall-collocations");
+  if (!field) {
+    return;
+  }
+  var parts = field.innerHTML
+    .split(/<br\s*\/?>/i)
+    .map(function(part) { return part.trim(); })
+    .filter(Boolean)
+    .slice(0, 2);
+  field.innerHTML = parts.join("<br>");
+})();
+</script>

@@ -1,0 +1,32 @@
+<div class="section top chunk-card chunk-anchor-card">
+  <div class="items chunk-head">
+    <span class="chunk-main">{{目标短语块}}</span>
+    <span class="audio block">{{发音}}</span>
+  </div>
+  <div id="instance" class="items chunk-example">{{例句}}</div>
+</div>
+
+<script>
+(function() {
+  var chunk = document.querySelector(".chunk-main");
+  var instance = document.querySelector("#instance");
+  if (!chunk || !instance || !instance.textContent.trim()) {
+    return;
+  }
+  var words = chunk.textContent.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) {
+    return;
+  }
+  var pattern = words
+    .filter(function(word) { return word.length > 2; })
+    .map(function(word) { return word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); })
+    .join("|");
+  if (!pattern) {
+    return;
+  }
+  var regex = new RegExp("\\b(?:" + pattern + ")\\b", "gi");
+  instance.innerHTML = instance.innerHTML.replace(regex, function(match) {
+    return "<b><u>" + match + "</u></b>";
+  });
+})();
+</script>
