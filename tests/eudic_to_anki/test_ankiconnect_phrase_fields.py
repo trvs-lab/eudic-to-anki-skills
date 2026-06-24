@@ -43,6 +43,28 @@ class AnkiconnectPhraseFieldTests(unittest.TestCase):
         self.assertEqual(fields["短语块挖空"], "The storm ____ serious damage on the town.")
         self.assertEqual(fields["发音"], "[sound:inflict.mp3]")
 
+    def test_build_trvs_lab_fields_maps_chinese_phrase_chunk_aliases(self) -> None:
+        fields = ankiconnect_import.build_trvs_lab_fields(
+            {
+                "单词": "inflict",
+                "音标": "/ɪnˈflɪkt/",
+                "词性": "vt.",
+                "释义": ["造成；使承受"],
+                "英英": "to make someone suffer harm, pain, or damage",
+                "词根": "in-（进入）+ flict（打击）",
+                "例句": "The storm inflicted serious damage on the town.",
+                "常用搭配": ["inflict pain on", "inflict punishment on"],
+                "目标短语块": "inflict damage on",
+                "短语块锚点": "造成严重伤害",
+                "短语块挖空": "The storm ____ serious damage on the town.",
+                "learning_priority": "focus",
+            },
+            "",
+        )
+        self.assertEqual(fields["目标短语块"], "inflict damage on")
+        self.assertEqual(fields["短语块锚点"], "造成严重伤害")
+        self.assertEqual(fields["短语块挖空"], "The storm ____ serious damage on the town.")
+
     def test_required_payload_fields_include_phrase_anchor_fields(self) -> None:
         fields = {
             "单词": "inflict",
