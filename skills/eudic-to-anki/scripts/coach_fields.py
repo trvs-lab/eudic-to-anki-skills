@@ -20,8 +20,11 @@ TARGET_CHUNK_CLOZE_KEYS = ("target_chunk_cloze", "短语块挖空")
 def first_text_field(note: dict, keys: tuple[str, ...]) -> str:
     for key in keys:
         value = note.get(key)
-        if value not in (None, ""):
-            return str(value).strip()
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
     return ""
 
 
