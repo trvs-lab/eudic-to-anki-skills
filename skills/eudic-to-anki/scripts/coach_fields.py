@@ -12,6 +12,17 @@ LEARNING_PRIORITY_MARKERS = {
     "passive": "◇",
     "ignore": "×",
 }
+TARGET_CHUNK_KEYS = ("target_chunk", "目标短语块")
+TARGET_CHUNK_MEANING_KEYS = ("target_chunk_meaning", "短语块锚点")
+TARGET_CHUNK_CLOZE_KEYS = ("target_chunk_cloze", "短语块挖空")
+
+
+def first_text_field(note: dict, keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = note.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
 
 
 def meaning_line_has_pos_prefix(line: str) -> bool:

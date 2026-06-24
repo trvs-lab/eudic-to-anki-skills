@@ -7,7 +7,14 @@ import json
 import sys
 from pathlib import Path
 
-from coach_fields import fuse_pos_into_meaning, normalize_learning_priority
+from coach_fields import (
+    TARGET_CHUNK_CLOZE_KEYS,
+    TARGET_CHUNK_KEYS,
+    TARGET_CHUNK_MEANING_KEYS,
+    first_text_field,
+    fuse_pos_into_meaning,
+    normalize_learning_priority,
+)
 
 
 def _normalize_list(value: object) -> list[str]:
@@ -79,6 +86,9 @@ def main() -> int:
                 "collocations": c.get("collocations", []),
                 "audio_html": c.get("audio_html", ""),
                 "learning_priority": _note_learning_priority(c),
+                "target_chunk": first_text_field(c, TARGET_CHUNK_KEYS),
+                "target_chunk_meaning": first_text_field(c, TARGET_CHUNK_MEANING_KEYS),
+                "target_chunk_cloze": first_text_field(c, TARGET_CHUNK_CLOZE_KEYS),
                 "source": m.get("source"),
                 "source_context": m.get("source_context", ""),
                 "tags": m.get("tags"),

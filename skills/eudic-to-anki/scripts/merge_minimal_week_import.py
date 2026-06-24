@@ -14,7 +14,14 @@ import importlib.util
 import json
 from pathlib import Path
 
-from coach_fields import fuse_pos_into_meaning, normalize_learning_priority
+from coach_fields import (
+    TARGET_CHUNK_CLOZE_KEYS,
+    TARGET_CHUNK_KEYS,
+    TARGET_CHUNK_MEANING_KEYS,
+    first_text_field,
+    fuse_pos_into_meaning,
+    normalize_learning_priority,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
@@ -134,6 +141,9 @@ def main() -> int:
                     "collocations": c["collocations"],
                     "audio_html": "",
                     "learning_priority": _note_learning_priority(c),
+                    "target_chunk": first_text_field(c, TARGET_CHUNK_KEYS),
+                    "target_chunk_meaning": first_text_field(c, TARGET_CHUNK_MEANING_KEYS),
+                    "target_chunk_cloze": first_text_field(c, TARGET_CHUNK_CLOZE_KEYS),
                     "source": meta["source"],
                     "source_context": meta.get("source_context") or source_contexts.get(w, ""),
                     "tags": meta["tags"],
