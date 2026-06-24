@@ -32,6 +32,20 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("{{目标短语块}}", recall_back)
         self.assertNotIn("{{短语块锚点}}", recall_back)
 
+    def test_model_referenced_assets_exist(self) -> None:
+        spec = json.loads((ASSETS / "trvs_lab_model.json").read_text(encoding="utf-8"))
+        for template in spec["card_templates"]:
+            self.assertTrue((ASSETS / template["FrontPath"]).is_file())
+            self.assertTrue((ASSETS / template["BackPath"]).is_file())
+        self.assertTrue((ASSETS / spec["css_path"]).is_file())
+
+    def test_anchor_highlighter_wraps_text_nodes_without_rewriting_markup(self) -> None:
+        anchor_front = (ASSETS / "trvs_lab_chunk_anchor_front.html").read_text(encoding="utf-8")
+        self.assertNotIn("instance.innerHTML = instance.innerHTML.replace", anchor_front)
+        self.assertIn("document.createTreeWalker", anchor_front)
+        self.assertIn("NodeFilter.SHOW_TEXT", anchor_front)
+        self.assertIn("createHighlightNode", anchor_front)
+
 
 if __name__ == "__main__":
     unittest.main()

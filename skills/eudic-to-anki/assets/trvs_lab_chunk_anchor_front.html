@@ -25,8 +25,67 @@
     return;
   }
   var regex = new RegExp("\\b(?:" + pattern + ")\\b", "gi");
-  instance.innerHTML = instance.innerHTML.replace(regex, function(match) {
-    return "<b><u>" + match + "</u></b>";
-  });
+
+  highlightTextNodes(instance, regex);
+
+  function highlightTextNodes(root, regex) {
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(node) {
+        regex.lastIndex = 0;
+        if (!node.nodeValue.trim() || shouldSkipNode(node, root) || !regex.test(node.nodeValue)) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var nodes = [];
+    var node;
+
+    while ((node = walker.nextNode())) {
+      nodes.push(node);
+    }
+
+    nodes.forEach(function(textNode) {
+      wrapMatches(textNode, regex);
+    });
+  }
+
+  function shouldSkipNode(node, root) {
+    var parent = node.parentNode;
+
+    while (parent && parent !== root) {
+      if (/^(B|U|SCRIPT|STYLE)$/i.test(parent.nodeName)) {
+        return true;
+      }
+      parent = parent.parentNode;
+    }
+
+    return false;
+  }
+
+  function wrapMatches(textNode, regex) {
+    var source = textNode.nodeValue;
+    var fragment = document.createDocumentFragment();
+    var lastIndex = 0;
+
+    regex.lastIndex = 0;
+    source.replace(regex, function(match, offset) {
+      fragment.appendChild(document.createTextNode(source.slice(lastIndex, offset)));
+      fragment.appendChild(createHighlightNode(match));
+      lastIndex = offset + match.length;
+      return match;
+    });
+    fragment.appendChild(document.createTextNode(source.slice(lastIndex)));
+
+    textNode.parentNode.replaceChild(fragment, textNode);
+  }
+
+  function createHighlightNode(text) {
+    var bold = document.createElement("b");
+    var underline = document.createElement("u");
+    underline.textContent = text;
+    bold.appendChild(underline);
+    return bold;
+  }
 })();
 </script>
