@@ -72,10 +72,22 @@ class ValidatePhraseChunkTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("passive notes must leave target_chunk_cloze empty", result.stderr)
 
+    def test_rejects_ignore_cloze(self) -> None:
+        result = self.run_validator(
+            valid_note(learning_priority="ignore", target_chunk_cloze="Fear can ____ judgment.")
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("ignore notes must leave target_chunk_cloze empty", result.stderr)
+
     def test_rejects_cloze_without_blank(self) -> None:
         result = self.run_validator(valid_note(target_chunk_cloze="The storm inflicted damage."))
         self.assertEqual(result.returncode, 1)
         self.assertIn("target_chunk_cloze must contain a blank", result.stderr)
+
+    def test_rejects_short_bracket_blank_cloze(self) -> None:
+        result = self.run_validator(valid_note(target_chunk_cloze="[blank] damage on town"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("target_chunk_cloze must be a natural sentence", result.stderr)
 
     def test_rejects_word_level_chunk_meaning(self) -> None:
         result = self.run_validator(valid_note(target_chunk_meaning="vt. 造成；使承受"))
@@ -84,6 +96,34 @@ class ValidatePhraseChunkTests(unittest.TestCase):
             "target_chunk_meaning should be a phrase-level Chinese anchor",
             result.stderr,
         )
+
+    def test_rejects_long_chunk_meaning(self) -> None:
+        result = self.run_validator(
+            valid_note(target_chunk_meaning="这是一个明显超过二十四个汉字的中文短语块锚点内容用于测试")
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "target_chunk_meaning should be a phrase-level Chinese anchor",
+            result.stderr,
+        )
+
+    def test_rejects_non_string_phrase_chunk_fields(self) -> None:
+        cases: list[tuple[str, object]] = [
+            ("target_chunk", ["inflict damage on"]),
+            ("target_chunk", {"chunk": "inflict damage on"}),
+            ("target_chunk", 456),
+            ("target_chunk_meaning", ["造成严重伤害"]),
+            ("target_chunk_meaning", {"meaning": "造成严重伤害"}),
+            ("target_chunk_meaning", 456),
+            ("target_chunk_cloze", ["[blank] damage on town"]),
+            ("target_chunk_cloze", {"cloze": "[blank] damage on town"}),
+            ("target_chunk_cloze", 456),
+        ]
+        for field, value in cases:
+            with self.subTest(field=field, value=type(value).__name__):
+                result = self.run_validator(valid_note(**{field: value}))
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(f"field {field!r} must be a string", result.stderr)
 
 
 if __name__ == "__main__":

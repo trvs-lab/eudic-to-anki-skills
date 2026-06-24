@@ -22,7 +22,6 @@ from coach_fields import (
     TARGET_CHUNK_CLOZE_KEYS,
     TARGET_CHUNK_KEYS,
     TARGET_CHUNK_MEANING_KEYS,
-    first_text_field,
     meaning_line_has_pos_prefix,
 )
 
@@ -140,12 +139,47 @@ def _validate_root_value(root_val: str, word: str, index: int) -> list[str]:
     return errs
 
 
+def _first_phrase_chunk_text_field(
+    note: dict[str, Any],
+    keys: tuple[str, ...],
+    index: int,
+    word: str,
+    errs: list[str],
+) -> str:
+    for key in keys:
+        value = note.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            errs.append(
+                f"note[{index}] word={word!r}: field {key!r} must be a string "
+                f"(got {type(value).__name__})"
+            )
+            continue
+        text = value.strip()
+        if text:
+            return text
+    return ""
+
+
 def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -> list[str]:
     errs: list[str] = []
     priority = str(note.get("learning_priority") or "").strip()
-    target_chunk = first_text_field(note, TARGET_CHUNK_KEYS)
-    target_chunk_meaning = first_text_field(note, TARGET_CHUNK_MEANING_KEYS)
-    target_chunk_cloze = first_text_field(note, TARGET_CHUNK_CLOZE_KEYS)
+    target_chunk = _first_phrase_chunk_text_field(note, TARGET_CHUNK_KEYS, index, word, errs)
+    target_chunk_meaning = _first_phrase_chunk_text_field(
+        note,
+        TARGET_CHUNK_MEANING_KEYS,
+        index,
+        word,
+        errs,
+    )
+    target_chunk_cloze = _first_phrase_chunk_text_field(
+        note,
+        TARGET_CHUNK_CLOZE_KEYS,
+        index,
+        word,
+        errs,
+    )
 
     if not target_chunk:
         errs.append(f"note[{index}] word={word!r}: target_chunk must not be empty")
@@ -165,7 +199,7 @@ def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -
                 f"note[{index}] word={word!r}: target_chunk_cloze must contain a blank "
                 "such as ____"
             )
-        elif _english_word_count(target_chunk_cloze) < 4:
+        elif _english_word_count(_CLOZE_BLANK_RE.sub(" ", target_chunk_cloze)) < 4:
             errs.append(
                 f"note[{index}] word={word!r}: target_chunk_cloze must be a natural "
                 f"sentence, got {target_chunk_cloze!r}"
