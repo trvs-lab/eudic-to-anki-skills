@@ -125,12 +125,16 @@ class ValidatePhraseChunkTests(unittest.TestCase):
             ("target_chunk", ["inflict damage on"]),
             ("target_chunk", {"chunk": "inflict damage on"}),
             ("target_chunk", 456),
+            ("target_chunk", []),
             ("target_chunk_meaning", ["造成严重伤害"]),
             ("target_chunk_meaning", {"meaning": "造成严重伤害"}),
             ("target_chunk_meaning", 456),
+            ("target_chunk_meaning", {}),
             ("target_chunk_cloze", ["[blank] damage on town"]),
             ("target_chunk_cloze", {"cloze": "[blank] damage on town"}),
             ("target_chunk_cloze", 456),
+            ("target_chunk_cloze", 0),
+            ("target_chunk_cloze", False),
         ]
         for field, value in cases:
             with self.subTest(field=field, value=type(value).__name__):
@@ -139,19 +143,25 @@ class ValidatePhraseChunkTests(unittest.TestCase):
                 self.assertIn(f"field {field!r} must be a string", result.stderr)
 
     def test_rejects_non_string_target_chunk_alias_even_with_valid_canonical(self) -> None:
-        result = self.run_validator(valid_note(目标短语块=["inflict damage on"]))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("field '目标短语块' must be a string", result.stderr)
+        for value in (["inflict damage on"], []):
+            with self.subTest(value=type(value).__name__):
+                result = self.run_validator(valid_note(目标短语块=value))
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("field '目标短语块' must be a string", result.stderr)
 
     def test_rejects_non_string_target_chunk_meaning_alias_even_with_valid_canonical(self) -> None:
-        result = self.run_validator(valid_note(短语块锚点={"meaning": "造成严重伤害"}))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("field '短语块锚点' must be a string", result.stderr)
+        for value in ({"meaning": "造成严重伤害"}, {}):
+            with self.subTest(value=type(value).__name__):
+                result = self.run_validator(valid_note(短语块锚点=value))
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("field '短语块锚点' must be a string", result.stderr)
 
     def test_rejects_non_string_target_chunk_cloze_alias_even_with_valid_canonical(self) -> None:
-        result = self.run_validator(valid_note(短语块挖空=123))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("field '短语块挖空' must be a string", result.stderr)
+        for value in (123, 0, False):
+            with self.subTest(value=type(value).__name__):
+                result = self.run_validator(valid_note(短语块挖空=value))
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("field '短语块挖空' must be a string", result.stderr)
 
 
 if __name__ == "__main__":

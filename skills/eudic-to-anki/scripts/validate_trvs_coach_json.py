@@ -150,11 +150,10 @@ def _first_phrase_chunk_text_field(
         if value is None:
             continue
         if not isinstance(value, str):
-            if value:
-                errs.append(
-                    f"note[{index}] word={word!r}: field {key!r} must be a string "
-                    f"(got {type(value).__name__})"
-                )
+            errs.append(
+                f"note[{index}] word={word!r}: field {key!r} must be a string "
+                f"(got {type(value).__name__})"
+            )
             continue
         text = value.strip()
         if text and not first_text:
