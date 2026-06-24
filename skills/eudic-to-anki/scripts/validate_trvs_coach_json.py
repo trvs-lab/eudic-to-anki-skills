@@ -17,7 +17,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from coach_fields import LEARNING_PRIORITY_VALUES, meaning_line_has_pos_prefix
+from coach_fields import (
+    LEARNING_PRIORITY_VALUES,
+    TARGET_CHUNK_CLOZE_KEYS,
+    TARGET_CHUNK_KEYS,
+    TARGET_CHUNK_MEANING_KEYS,
+    first_text_field,
+    meaning_line_has_pos_prefix,
+)
 
 REPLACEMENT = "\ufffd"
 # CJK + common extension blocks; root with morphological "+" must include a Chinese gloss (skill rule).
@@ -36,6 +43,8 @@ _ROOT_BANNED_EN_RE = re.compile(
 )
 _ROOT_PLACEHOLDERS = {"-", "无"}
 _ROOT_TOKEN_CLEAN_RE = re.compile(r"[^a-z0-9]+", re.I)
+_CLOZE_BLANK_RE = re.compile(r"_{2,}|\[[^\]]*blank[^\]]*\]|\bblank\b", re.I)
+_CHINESE_POS_PREFIX_RE = re.compile(r"^[a-z]{1,12}\.\s*", re.I)
 REQUIRED_KEYS = (
     "word",
     "pronunciation",
@@ -47,6 +56,8 @@ REQUIRED_KEYS = (
     "collocations",
     "audio_html",
     "learning_priority",
+    "target_chunk",
+    "target_chunk_meaning",
 )
 
 
@@ -126,6 +137,44 @@ def _validate_root_value(root_val: str, word: str, index: int) -> list[str]:
             f"note[{index}] word={word!r}: root repeats the whole word as its only segment "
             f"({root_val!r}); use '-' or '无' if it cannot be usefully split"
         )
+    return errs
+
+
+def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -> list[str]:
+    errs: list[str] = []
+    priority = str(note.get("learning_priority") or "").strip()
+    target_chunk = first_text_field(note, TARGET_CHUNK_KEYS)
+    target_chunk_meaning = first_text_field(note, TARGET_CHUNK_MEANING_KEYS)
+    target_chunk_cloze = first_text_field(note, TARGET_CHUNK_CLOZE_KEYS)
+
+    if not target_chunk:
+        errs.append(f"note[{index}] word={word!r}: target_chunk must not be empty")
+    if not target_chunk_meaning:
+        errs.append(f"note[{index}] word={word!r}: target_chunk_meaning must not be empty")
+    elif _CHINESE_POS_PREFIX_RE.match(target_chunk_meaning) or len(target_chunk_meaning) > 24:
+        errs.append(
+            f"note[{index}] word={word!r}: target_chunk_meaning should be a phrase-level "
+            f"Chinese anchor, not a word-level dictionary gloss (got {target_chunk_meaning!r})"
+        )
+
+    if priority == "focus":
+        if not target_chunk_cloze:
+            errs.append(f"note[{index}] word={word!r}: focus notes need target_chunk_cloze")
+        elif not _CLOZE_BLANK_RE.search(target_chunk_cloze):
+            errs.append(
+                f"note[{index}] word={word!r}: target_chunk_cloze must contain a blank "
+                "such as ____"
+            )
+        elif _english_word_count(target_chunk_cloze) < 4:
+            errs.append(
+                f"note[{index}] word={word!r}: target_chunk_cloze must be a natural "
+                f"sentence, got {target_chunk_cloze!r}"
+            )
+    elif priority in {"passive", "ignore"} and target_chunk_cloze:
+        errs.append(
+            f"note[{index}] word={word!r}: {priority} notes must leave target_chunk_cloze empty"
+        )
+
     return errs
 
 
@@ -350,6 +399,8 @@ def _check_note(
     root_val = note.get("root", "")
     if isinstance(root_val, str):
         errs.extend(_validate_root_value(root_val, w, index))
+
+    errs.extend(_validate_phrase_chunk_fields(note, index, w))
 
     return errs
 

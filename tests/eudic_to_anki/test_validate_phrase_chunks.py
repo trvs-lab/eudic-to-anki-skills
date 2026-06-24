@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SKILL = ROOT / "skills" / "eudic-to-anki"
+VALIDATOR = SKILL / "scripts" / "validate_trvs_coach_json.py"
+
+
+def valid_note(**overrides: object) -> dict[str, object]:
+    note: dict[str, object] = {
+        "word": "inflict",
+        "pronunciation": "/ɪnˈflɪkt/",
+        "part_of_speech": "vt.",
+        "meaning": ["vt. 造成；使承受"],
+        "english_definition": "to make someone suffer harm, pain, or damage",
+        "root": "in-（进入）+ flict（打击）",
+        "example": "The storm inflicted serious damage on the town.",
+        "collocations": ["inflict pain on", "inflict punishment on"],
+        "audio_html": "",
+        "learning_priority": "focus",
+        "target_chunk": "inflict damage on",
+        "target_chunk_meaning": "造成严重伤害",
+        "target_chunk_cloze": "The storm ____ serious damage on the town.",
+    }
+    note.update(overrides)
+    return note
+
+
+class ValidatePhraseChunkTests(unittest.TestCase):
+    def run_validator(self, note: dict[str, object]) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "notes.json"
+            path.write_text(json.dumps({"notes": [note]}, ensure_ascii=False), encoding="utf-8")
+            return subprocess.run(
+                [sys.executable, str(VALIDATOR), str(path)],
+                cwd=SKILL,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+    def test_accepts_valid_focus_phrase_chunk_note(self) -> None:
+        result = self.run_validator(valid_note())
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_requires_target_chunk(self) -> None:
+        result = self.run_validator(valid_note(target_chunk=""))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("target_chunk must not be empty", result.stderr)
+
+    def test_requires_target_chunk_meaning(self) -> None:
+        result = self.run_validator(valid_note(target_chunk_meaning=""))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("target_chunk_meaning must not be empty", result.stderr)
+
+    def test_requires_focus_cloze(self) -> None:
+        result = self.run_validator(valid_note(target_chunk_cloze=""))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("focus notes need target_chunk_cloze", result.stderr)
+
+    def test_rejects_passive_cloze(self) -> None:
+        result = self.run_validator(
+            valid_note(learning_priority="passive", target_chunk_cloze="Fear can ____ judgment.")
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("passive notes must leave target_chunk_cloze empty", result.stderr)
+
+    def test_rejects_cloze_without_blank(self) -> None:
+        result = self.run_validator(valid_note(target_chunk_cloze="The storm inflicted damage."))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("target_chunk_cloze must contain a blank", result.stderr)
+
+    def test_rejects_word_level_chunk_meaning(self) -> None:
+        result = self.run_validator(valid_note(target_chunk_meaning="vt. 造成；使承受"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "target_chunk_meaning should be a phrase-level Chinese anchor",
+            result.stderr,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
