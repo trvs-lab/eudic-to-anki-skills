@@ -35,6 +35,12 @@ DEFAULT_AUDIO_FIELD = "发音"
 DEFAULT_AUDIO_FORMAT = "mp3"
 API_VERSION = 6
 STATIC_TAGS_TO_DROP = {"english", "vocab", "eudic"}
+CHUNK_ANCHOR_TEMPLATE = "Chunk Anchor"
+CHUNK_RECALL_TEMPLATE = "Chunk Recall"
+CHUNK_TEMPLATE_BY_ORD = {
+    0: CHUNK_ANCHOR_TEMPLATE,
+    1: CHUNK_RECALL_TEMPLATE,
+}
 TRVS_REQUIRED_FIELDS = (
     "音标",
     "释义",
@@ -412,6 +418,30 @@ def priority_deck_name(base_deck: str, priority: str) -> str:
     return f"{deck}::{priority}"
 
 
+def chunk_anchor_deck_name(base_deck: str, priority: str) -> str:
+    deck = base_deck.strip() or DEFAULT_DECK
+    return f"{deck}::chunk-anchor::{priority}"
+
+
+def chunk_recall_deck_name(base_deck: str) -> str:
+    deck = base_deck.strip() or DEFAULT_DECK
+    return f"{deck}::chunk-recall::focus"
+
+
+def chunk_decks_for_priority(base_deck: str, priority: str) -> list[str]:
+    decks = [chunk_anchor_deck_name(base_deck, priority)]
+    if priority == "focus":
+        decks.append(chunk_recall_deck_name(base_deck))
+    return decks
+
+
+def all_chunk_decks(base_deck: str) -> list[str]:
+    return [
+        chunk_anchor_deck_name(base_deck, priority)
+        for priority in LEARNING_PRIORITY_VALUES
+    ] + [chunk_recall_deck_name(base_deck)]
+
+
 def note_target_deck(
     note: dict[str, Any],
     *,
@@ -705,7 +735,6 @@ def note_to_anki_payload(
     target_deck = deck
     if model == STRUCTURED_VOCAB_MODEL:
         priority = note_learning_priority(note)
-        target_deck = priority_deck_name(deck, priority) if use_priority_decks else deck
         tags.append(f"priority::{priority}")
     tags = sorted(set(filter_static_tags(tags)))
     audio_html = prepare_audio_html(
@@ -865,6 +894,84 @@ def dedupe_dia_payloads_last_wins(payloads: list[dict[str, Any]]) -> list[dict[s
     return [by_word[w] for w in order]
 
 
+def _card_template_name(card_info: dict[str, Any]) -> str:
+    explicit = str(
+        card_info.get("template") or card_info.get("templateName") or ""
+    ).strip()
+    if explicit:
+        return explicit
+    if "ord" in card_info:
+        try:
+            return CHUNK_TEMPLATE_BY_ORD[int(card_info["ord"])]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise AnkiImportError(
+                f"Could not identify card template for card {card_info.get('cardId')}: "
+                f"unexpected ord {card_info.get('ord')!r}"
+            ) from exc
+    raise AnkiImportError(
+        f"Could not identify card template for card {card_info.get('cardId')}: "
+        "cardsInfo response has no template/templateName/ord"
+    )
+
+
+def _priority_from_note_info(info: dict[str, Any]) -> str:
+    fields = info.get("fields") or {}
+    marker = _field_text_value(fields.get("学习标记"))
+    if marker == "★":
+        return "focus"
+    if marker == "◇":
+        return "passive"
+    if marker == "×":
+        return "ignore"
+    word = _field_text_value(fields.get("单词")) or f"note:{info.get('noteId', '?')}"
+    raise AnkiImportError(f"Cannot route cards for {word}: unknown 学习标记 {marker!r}")
+
+
+def route_trvs_chunk_cards(
+    client: AnkiConnectClient,
+    note_ids: list[int],
+    *,
+    base_deck: str,
+) -> None:
+    if not note_ids:
+        return
+    note_infos = client.invoke("notesInfo", notes=note_ids)
+    for info in note_infos or []:
+        note_id = int(info.get("noteId") or info.get("note") or 0)
+        word = (
+            _field_text_value((info.get("fields") or {}).get("单词"))
+            or f"note:{note_id}"
+        )
+        priority = _priority_from_note_info(info)
+        card_ids = [int(card_id) for card_id in info.get("cards") or []]
+        if not card_ids:
+            raise AnkiImportError(f"{word}: no generated cards to route")
+        card_infos = client.invoke("cardsInfo", cards=card_ids)
+        grouped: dict[str, list[int]] = {}
+        seen_templates: set[str] = set()
+        for card in card_infos or []:
+            card_id = int(card.get("cardId") or card.get("card") or 0)
+            template = _card_template_name(card)
+            seen_templates.add(template)
+            if template == CHUNK_ANCHOR_TEMPLATE:
+                deck = chunk_anchor_deck_name(base_deck, priority)
+            elif template == CHUNK_RECALL_TEMPLATE and priority == "focus":
+                deck = chunk_recall_deck_name(base_deck)
+            elif template == CHUNK_RECALL_TEMPLATE:
+                raise AnkiImportError(f"{word}: non-focus note generated a Chunk Recall card")
+            else:
+                raise AnkiImportError(
+                    f"{word}: unexpected card template {template!r} for card {card_id}"
+                )
+            grouped.setdefault(deck, []).append(card_id)
+        if CHUNK_ANCHOR_TEMPLATE not in seen_templates:
+            raise AnkiImportError(f"{word}: missing Chunk Anchor card")
+        if priority == "focus" and CHUNK_RECALL_TEMPLATE not in seen_templates:
+            raise AnkiImportError(f"{word}: focus note did not generate a Chunk Recall card")
+        for deck, cards in grouped.items():
+            client.invoke("changeDeck", cards=cards, deck=deck)
+
+
 def upsert_dia_notes(
     client: AnkiConnectClient,
     payloads: list[dict[str, Any]],
@@ -879,9 +986,14 @@ def upsert_dia_notes(
     updated_notes = 0
     for payload in payloads:
         word = payload["fields"]["单词"]
+        search_decks = (
+            [base_deck, *all_chunk_decks(base_deck)]
+            if use_priority_decks
+            else [payload["deckName"]]
+        )
         nids = find_dia_note_ids_in_decks(
             client,
-            priority_search_decks(base_deck, payload["deckName"], use_priority_decks),
+            search_decks,
             payload["modelName"],
             word,
         )
@@ -900,8 +1012,6 @@ def upsert_dia_notes(
                         "tags": payload["tags"],
                     },
                 )
-                if card_ids:
-                    client.invoke("changeDeck", cards=card_ids, deck=payload["deckName"])
                 if not preserve_progress_on_update:
                     if card_ids:
                         client.invoke("forgetCards", cards=card_ids)
@@ -962,15 +1072,25 @@ def main() -> int:
             raise AnkiImportError("Input file did not contain any notes.")
 
         use_priority_decks = priority_decks_enabled(args.model, args.no_priority_decks)
-        target_decks = {
-            note_target_deck(
-                note,
-                base_deck=args.deck,
-                model=args.model,
-                use_priority_decks=use_priority_decks,
-            )
-            for note in raw_notes
-        }
+        if args.model == STRUCTURED_VOCAB_MODEL and not args.no_priority_decks:
+            target_decks = {
+                deck_name
+                for note in raw_notes
+                for deck_name in chunk_decks_for_priority(
+                    args.deck,
+                    note_learning_priority(note),
+                )
+            }
+        else:
+            target_decks = {
+                note_target_deck(
+                    note,
+                    base_deck=args.deck,
+                    model=args.model,
+                    use_priority_decks=use_priority_decks,
+                )
+                for note in raw_notes
+            }
         decks_to_ensure = {args.deck, *target_decks}
         for deck_name in sorted(decks_to_ensure):
             ensure_deck(client, deck_name, args.create_deck)
@@ -1022,9 +1142,14 @@ def main() -> int:
                 would_add = 0
                 for p in payload_notes:
                     w = p["fields"]["单词"]
+                    search_decks = (
+                        [args.deck, *all_chunk_decks(args.deck)]
+                        if use_priority_decks
+                        else [p["deckName"]]
+                    )
                     nids = find_dia_note_ids_in_decks(
                         client,
-                        priority_search_decks(args.deck, p["deckName"], use_priority_decks),
+                        search_decks,
                         args.model,
                         w,
                     )
@@ -1034,7 +1159,7 @@ def main() -> int:
                         would_add += 1
                 print(
                     f"{STRUCTURED_VOCAB_MODEL} upsert dry-run: {would_update} existing note(s) would update "
-                    f"and move to the target deck if needed; {would_add} new note(s) would be added."
+                    f"and route generated cards if needed; {would_add} new note(s) would be added."
                 )
                 if would_update and not args.preserve_progress_on_update:
                     print("Existing updated cards would be reset to new.")
@@ -1086,6 +1211,13 @@ def main() -> int:
             )
             if skipped_duplicates:
                 print(f"Skipped {skipped_duplicates} duplicate notes.")
+
+        if args.model == STRUCTURED_VOCAB_MODEL and use_priority_decks and not args.dry_run:
+            route_trvs_chunk_cards(client, affected_note_ids, base_deck=args.deck)
+            print(
+                "Routed generated cards into phrase chunk decks for "
+                f"{len(affected_note_ids)} note(s)."
+            )
 
         if args.verify_required_fields:
             verify_anki_required_fields(
