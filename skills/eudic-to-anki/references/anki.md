@@ -27,9 +27,21 @@ python3 scripts/sync_trvs_lab_model.py --templates-only
 python3 scripts/sync_trvs_lab_model.py --create-if-missing
 ```
 
-- `TRVS-Lab` 模型会自动补齐 `学习标记` 字段并更新模板/CSS；该字段保留为复习元数据，并仅在背面右上角以轻量纯符号提示显示。
+- `TRVS-Lab` 模型会自动补齐 `学习标记` 和短语块字段并更新模板/CSS；`学习标记` 保留为复习元数据，并仅在背面右上角以轻量纯符号提示显示。
 
-- `--deck words` 是 base deck；`TRVS-Lab` 默认按 `learning_priority` 导入到 `words::focus`、`words::passive`、`words::ignore`。`ignore` 不会默认挂起、跳过或排除。若需要全部进同一个 deck，加 `--no-priority-decks`。
+- `--deck words` 是 base deck。`TRVS-Lab` 会按卡片类型分流：
+  - `words::chunk-anchor::focus`
+  - `words::chunk-anchor::passive`
+  - `words::chunk-anchor::ignore`
+  - `words::chunk-recall::focus`
+
+- 这是 fresh-start breaking upgrade；旧 `TRVS-Lab` note 不保证显示正确。升级前清空旧 note 或相关 deck。
+
+- `ignore` 只生成 `words::chunk-anchor::ignore` 锚点卡，不会默认挂起、跳过或排除。
+
+- Anchor 卡和 recall 卡是分开的模板与 deck，用于学习短语块，而不是孤立单词。
+
+- 不生成短语块专用音频；两类卡片都使用主单词音频。Recall 卡背面显示词级中文 `meaning`，不重复短语块锚点。
 
 - 导入前预演：
 
@@ -45,6 +57,6 @@ python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/import.json --deck 
 
 - `--require-audio` 会要求最终 `发音` 字段为 `[sound:...]`；`--verify-required-fields` 会导入后回读 Anki，检查 `音标/释义/英英/词根/例句/常用搭配/发音/学习标记`。
 
-- `--dia-upsert` 会在 base deck 和 `focus/passive/ignore` 子牌组里按 `单词` 查找旧卡；如果 priority 改变，会更新并移动到新的目标子牌组，避免重复建卡。
+- `--dia-upsert` 会在 base deck 和短语块卡片 deck 里按 `单词` 查找旧 note；更新字段和标签后，按生成卡片类型路由到 chunk anchor / chunk recall deck，避免重复建卡。
 
 - 其中 `<ABS_TEMP_DIR>` 代表展开后的真实绝对目录，例如 `/Users/alice/Documents/eudic-to-anki-temp`

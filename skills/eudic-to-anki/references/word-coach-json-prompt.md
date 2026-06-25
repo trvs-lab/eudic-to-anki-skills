@@ -12,6 +12,9 @@
 - `collocations` (non-empty array)
 - `audio_html` (string, 可以为空)
 - `learning_priority` (string, 只能是 `focus` / `passive` / `ignore`)
+- `target_chunk` (string, 必填，主短语块锚点)
+- `target_chunk_meaning` (string, 必填，短语块中文锚点)
+- `target_chunk_cloze` (string, `focus` 必填；`passive` / `ignore` 必须为空字符串)
 
 输入的 partial note 可能还带有 `source_context`，这是欧路导出的真实生词来源句。它不是 Anki 必填字段，但必须用于判断 `example`。
 
@@ -95,6 +98,27 @@
 
 拿不准时默认 `passive`，不要默认 `focus`。只有明确无助于真实语言能力或明显是噪声时才用 `ignore`。
 
+`target_chunk`
+
+- 每个 note 必填。
+- 优先写真实、自然、可复用的短语块或搭配，如 `inflict damage on`、`go berserk`、`a look of revulsion`。
+- 对具体物件、专名、低输出词，允许写最小语境框架，如 `a sphinx`、`the crook of his arm`。
+- 只有确实没有自然词块时才退回单词本身；不要默认把 `target_chunk` 写成 `word`。
+
+`target_chunk_meaning`
+
+- 每个 note 必填。
+- 写短语块级中文锚点，不写单词级词典释义。
+- 正例：`造成严重伤害`、`突然失控`、`厌恶的表情`。
+- 反例：`vt. 造成；使承受`、`一种表示造成伤害的动词短语`。
+
+`target_chunk_cloze`
+
+- `focus` note 必填，`passive` 和 `ignore` 必须写空字符串。
+- 必须是自然英文句子，并包含明显空格，如 `____`。
+- 正例：`The storm ____ serious damage on the town.`
+- 反例：`____ damage on`、`inflict damage on`。
+
 `example`
 
 - 优先使用 `source_context`，因为它来自真实阅读场景，记忆钩子更强。
@@ -152,4 +176,6 @@
 - `collocations` 是否至少 2 条常见搭配
 - `audio_html` 可以在导入前为空，但最终 Anki 的 `发音` 字段必须由导入脚本生成 `[sound:...]`
 - `learning_priority` 是否存在，且只使用 `focus` / `passive` / `ignore`
+- `target_chunk` 和 `target_chunk_meaning` 是否存在，且是短语块级锚点
+- `focus` note 是否有自然句子形式的 `target_chunk_cloze`；`passive` / `ignore` note 是否把 `target_chunk_cloze` 留空
 - 若不合法，立即改写后再输出

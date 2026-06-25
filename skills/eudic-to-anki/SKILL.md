@@ -29,7 +29,7 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 
 - Date: yesterday (local timezone) unless user specifies range.
 - Source: all Eudic categories unless user specifies category.
-- Base deck: `words` unless user specifies. `TRVS-Lab` imports route notes by `learning_priority` into `words::focus`, `words::passive`, or `words::ignore` by default.
+- Base deck: `words` unless user specifies. `TRVS-Lab` routes generated cards into phrase chunk anchor and recall decks under the base deck.
 - Note type: `TRVS-Lab`.
 - Intermediate artifacts: the user's dedicated Documents artifact dir only. Use the canonical absolute form `<ABS_TEMP_DIR>` such as `/Users/alice/Documents/eudic-to-anki-temp`.
 - Optional override for local testing/custom setups: `EUDIC_TO_ANKI_TEMP_DIR=/path/to/temp`.
@@ -76,8 +76,12 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 - For polysemous words, classify by the highest-transfer common sense, not only the most concrete sense: common abstract, verbal, rhetorical, or high-value collocational senses that improve expression or comprehension should make the word `focus` (e.g. `foil`); stable concrete concept terms usually remain `passive` (e.g. `carbon dioxide`).
 - Do not classify by part of speech. Nouns, verbs, adjectives, and adverbs can all be `focus` or `passive`; judge only by real fluency value and whether the word is worth active output.
 - Protect core common vocabulary: high-frequency, polysemous, collocation-rich, easily misused, or phrase-forming everyday words should be `focus` even if they are not advanced, because they carry more fluency value than many rare hard words.
-- Anki import routes `TRVS-Lab` notes by `learning_priority` under the selected base deck: `--deck words` becomes `words::focus`, `words::passive`, and `words::ignore`. It also stores the priority in the `学习标记` field as symbols (`★`, `◇`, `×`) and stable tags (`priority::focus`, `priority::passive`, `priority::ignore`). The card template shows this only as a subtle back-side hint, never on the front.
-- `ignore` is still imported normally into the `ignore` subdeck. Do not suspend, skip, or exclude it unless the user explicitly asks.
+- `TRVS-Lab` is a fresh-start phrase chunk model. Before upgrading an existing Anki setup, the user should clear old `TRVS-Lab` notes or relevant decks; old notes without phrase chunk fields are not supported by the new templates.
+- Every coach note must include `target_chunk` and `target_chunk_meaning`. `focus` notes must include `target_chunk_cloze`; `passive` and `ignore` notes must leave `target_chunk_cloze` empty so they do not generate recall cards.
+- Anki import routes generated cards by review action: Chunk Anchor cards go to `words::chunk-anchor::<focus|passive|ignore>`, while Chunk Recall cards for focus notes go to `words::chunk-recall::focus`.
+- Anchor and recall cards are separate templates/decks for learning phrase chunks, not isolated words. There is no chunk-specific audio; both card types use the main word audio. Recall card backs show the word-level Chinese `meaning`, not a repeated phrase anchor.
+- Anki import stores priority in the `学习标记` field as symbols (`★`, `◇`, `×`) and stable tags (`priority::focus`, `priority::passive`, `priority::ignore`). The card template shows this only as a subtle back-side hint, never on the front.
+- `ignore` anchor cards are still imported normally into `words::chunk-anchor::ignore`. Do not suspend, skip, or exclude them unless the user explicitly asks.
 - The pipeline no longer adds static tags `english`, `vocab`, or `eudic`; only priority tags and user-supplied `--tag` values are kept.
 - Every final import note must have complete AmE IPA in `pronunciation`, a non-empty `example`, and at least two common `collocations`.
 - Chinese `meaning` must be regenerated as short, natural, dictionary-style Chinese labels. Do not paste Eudic `exp`, and do not write explanatory definitions such as `n. 由一个碳原子和两个氧原子组成的气体`; write `n. 二氧化碳` and put explanations in `english_definition`.
@@ -90,9 +94,9 @@ All commands below assume cwd is this skill root: `eudic-to-anki/`.
 - For large lists, use batched subagents and validate each batch before merge.
 - If subagent output is base64, decode via:
   - `python3 scripts/decode_subagent_transcript_b64.py <subagent.jsonl> -o <ABS_TEMP_DIR>/coach_batch_01.json`
-- Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types, missing IPA/example/collocations/english_definition, weak English definitions, long/explanatory meanings, missing POS markers, missing `part_of_speech`, invalid `learning_priority`, whole-word pseudo-roots, all-placeholder roots, or suspicious single-letter words).
+- Block import on validator errors (`U+FFFD`, mojibake markers, wrong field types, missing IPA/example/collocations/english_definition, weak English definitions, long/explanatory meanings, missing POS markers, missing `part_of_speech`, invalid `learning_priority`, missing phrase chunk fields, whole-word pseudo-roots, all-placeholder roots, or suspicious single-letter words).
 - Run `ankiconnect_import.py --dry-run --verify-required-fields` before the real import, then run the real import with `--require-audio --verify-required-fields` and spot-check several notes in Anki, especially `音标`、`释义`、`英英`、`词根`、`例句`、`常用搭配`、`发音`、`学习标记`.
-- `--dia-upsert` searches the base deck and priority subdecks, so a word can move between `focus`、`passive`、`ignore` without duplicate notes. It resets existing Anki cards to new by default when updating. Only add `--preserve-progress-on-update` when the user explicitly says not to reset learning progress.
+- `--dia-upsert` searches the base deck and generated phrase chunk decks, then updates matching notes without duplicate notes. It resets existing Anki cards to new by default when updating. Only add `--preserve-progress-on-update` when the user explicitly says not to reset learning progress.
 - After a successful import, `ankiconnect_import.py` runs Anki sync by default; pass `--no-sync` to skip.
 - If validation fails (especially `root` format), regenerate only the failed batch/words and re-run validator before merge/import.
 

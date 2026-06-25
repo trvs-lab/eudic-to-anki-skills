@@ -8,6 +8,6 @@
 2. agent 按 `references/word-coach-json-prompt.md` 生成 `<ABS_TEMP_DIR>/word_list_import.json`；没有来源句时才造简洁例句。
 3. 内容自查：确认没有空音标、空英英释义、空例句、空搭配、整批 `root: "-"`/`"无"`、整词伪词根（如 `crimson（深红）`）、过长/解释式中文释义、弱英英释义或单字母误选词。
 4. 校验：`python3 scripts/validate_trvs_coach_json.py <ABS_TEMP_DIR>/word_list_import.json`
-5. dry-run：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/word_list_import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run`。确认输出里的 target decks 为 `words::focus/passive/ignore` 分流。
+5. dry-run：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/word_list_import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run`。确认输出里的 Planned phrase chunk card decks 包含 `words::chunk-anchor::focus/passive/ignore` 和 `words::chunk-recall::focus`。
 6. 导入（成功后默认同步；跳过加 `--no-sync`）：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/word_list_import.json --deck words --create-deck --dia-upsert --require-audio --verify-required-fields --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text \"{word}\" --output \"{output}\"'`
 7. 导入后抽查 Anki 实际字段：`音标/释义/英英/词根/例句/常用搭配/发音`。
