@@ -171,8 +171,9 @@ def parse_args() -> argparse.Namespace:
         "--dia-upsert",
         action="store_true",
         help=(
-            f"{STRUCTURED_VOCAB_MODEL} only: match existing notes in the target priority decks "
-            "by the 单词 field, update fields/tags/deck, then reset existing cards to new by default. "
+            f"{STRUCTURED_VOCAB_MODEL} only: match existing notes in the base deck plus chunk decks "
+            "by the 单词 field, update fields/tags, route generated cards by template, "
+            "then reset existing cards to new by default. "
             "Words appearing multiple times in the input keep the last payload per word."
         ),
     )
