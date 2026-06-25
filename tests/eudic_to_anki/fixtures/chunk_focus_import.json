@@ -1,0 +1,24 @@
+{
+  "notes": [
+    {
+      "word": "inflict",
+      "pronunciation": "/ɪnˈflɪkt/",
+      "part_of_speech": "vt.",
+      "meaning": [
+        "vt. 造成；使承受"
+      ],
+      "english_definition": "to make someone suffer harm, pain, or damage",
+      "root": "in-（进入）+ flict（打击）",
+      "example": "The storm inflicted serious damage on the town.",
+      "collocations": [
+        "inflict pain on",
+        "inflict punishment on"
+      ],
+      "audio_html": "",
+      "learning_priority": "focus",
+      "target_chunk": "inflict damage on",
+      "target_chunk_meaning": "造成严重伤害",
+      "target_chunk_cloze": "The storm ____ serious damage on the town."
+    }
+  ]
+}
