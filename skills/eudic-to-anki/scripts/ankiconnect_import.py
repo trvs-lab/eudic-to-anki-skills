@@ -78,15 +78,17 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_DECK,
         help=(
             f"Base deck name. Default: {DEFAULT_DECK}. "
-            f"{STRUCTURED_VOCAB_MODEL} notes route to <deck>::focus/passive/ignore by default."
+            f"For {STRUCTURED_VOCAB_MODEL}, notes are created in this deck, then generated "
+            "cards route to <deck>::chunk-anchor::<focus|passive|ignore> and "
+            "<deck>::chunk-recall::focus when priority decks are enabled."
         ),
     )
     parser.add_argument(
         "--no-priority-decks",
         action="store_true",
         help=(
-            f"{STRUCTURED_VOCAB_MODEL} only: keep all notes in --deck instead of routing "
-            "by learning_priority to focus/passive/ignore subdecks."
+            f"{STRUCTURED_VOCAB_MODEL} only: keep generated cards in --deck instead of "
+            "routing them to phrase chunk card decks."
         ),
     )
     parser.add_argument(
