@@ -481,6 +481,41 @@ def deck_counts_text(payloads: list[dict[str, Any]]) -> str:
     return ", ".join(f"{deck}: {count}" for deck, count in sorted(counts.items()))
 
 
+def _priority_from_fields(fields: dict[str, Any], subject: str) -> str:
+    marker = _field_text_value(fields.get("学习标记"))
+    if marker == "★":
+        return "focus"
+    if marker == "◇":
+        return "passive"
+    if marker == "×":
+        return "ignore"
+    raise AnkiImportError(
+        f"Cannot route cards for {subject}: unknown 学习标记 {marker!r}"
+    )
+
+
+def planned_chunk_deck_counts(
+    payloads: list[dict[str, Any]],
+    base_deck: str,
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for payload in payloads:
+        fields = payload.get("fields") or {}
+        word = _field_text_value(fields.get("单词")) or "<unknown>"
+        priority = _priority_from_fields(fields, word)
+        for deck in chunk_decks_for_priority(base_deck, priority):
+            counts[deck] = counts.get(deck, 0) + 1
+    return counts
+
+
+def planned_chunk_deck_counts_text(
+    payloads: list[dict[str, Any]],
+    base_deck: str,
+) -> str:
+    counts = planned_chunk_deck_counts(payloads, base_deck)
+    return ", ".join(f"{deck}: {count}" for deck, count in sorted(counts.items()))
+
+
 def build_trvs_lab_fields(note: dict[str, Any], audio_html: str) -> dict[str, str]:
     """Map JSON / coach notes onto the fresh-start TRVS-Lab phrase chunk note type."""
     meaning_values = normalize_list(note.get("meaning") or note.get("释义"))
@@ -916,15 +951,43 @@ def _card_template_name(card_info: dict[str, Any]) -> str:
 
 def _priority_from_note_info(info: dict[str, Any]) -> str:
     fields = info.get("fields") or {}
-    marker = _field_text_value(fields.get("学习标记"))
-    if marker == "★":
-        return "focus"
-    if marker == "◇":
-        return "passive"
-    if marker == "×":
-        return "ignore"
     word = _field_text_value(fields.get("单词")) or f"note:{info.get('noteId', '?')}"
-    raise AnkiImportError(f"Cannot route cards for {word}: unknown 学习标记 {marker!r}")
+    return _priority_from_fields(fields, word)
+
+
+def _duplicate_ids(ids: list[int]) -> list[int]:
+    seen: set[int] = set()
+    duplicates: list[int] = []
+    for item in ids:
+        if item in seen and item not in duplicates:
+            duplicates.append(item)
+        seen.add(item)
+    return duplicates
+
+
+def _raise_if_ids_do_not_match(
+    *,
+    expected: list[int],
+    actual: list[int],
+    label: str,
+) -> None:
+    expected_set = set(expected)
+    actual_set = set(actual)
+    duplicate_actual = _duplicate_ids(actual)
+    if actual_set == expected_set and not duplicate_actual:
+        return
+    problems: list[str] = []
+    missing = sorted(expected_set - actual_set)
+    unexpected = sorted(actual_set - expected_set)
+    if missing:
+        problems.append(f"missing {missing}")
+    if unexpected:
+        problems.append(f"unexpected {unexpected}")
+    if duplicate_actual:
+        problems.append(f"duplicate {sorted(duplicate_actual)}")
+    raise AnkiImportError(
+        f"{label}: malformed AnkiConnect response ({'; '.join(problems)})"
+    )
 
 
 def route_trvs_chunk_cards(
@@ -935,8 +998,19 @@ def route_trvs_chunk_cards(
 ) -> None:
     if not note_ids:
         return
-    note_infos = client.invoke("notesInfo", notes=note_ids)
-    for info in note_infos or []:
+    requested_note_ids = [int(note_id) for note_id in note_ids]
+    note_infos = client.invoke("notesInfo", notes=requested_note_ids) or []
+    returned_note_ids = [
+        int(info.get("noteId") or info.get("note") or 0)
+        for info in note_infos
+    ]
+    _raise_if_ids_do_not_match(
+        expected=requested_note_ids,
+        actual=returned_note_ids,
+        label="notesInfo",
+    )
+    all_grouped: dict[str, list[int]] = {}
+    for info in note_infos:
         note_id = int(info.get("noteId") or info.get("note") or 0)
         word = (
             _field_text_value((info.get("fields") or {}).get("单词"))
@@ -946,10 +1020,19 @@ def route_trvs_chunk_cards(
         card_ids = [int(card_id) for card_id in info.get("cards") or []]
         if not card_ids:
             raise AnkiImportError(f"{word}: no generated cards to route")
-        card_infos = client.invoke("cardsInfo", cards=card_ids)
+        card_infos = client.invoke("cardsInfo", cards=card_ids) or []
+        returned_card_ids = [
+            int(card.get("cardId") or card.get("card") or 0)
+            for card in card_infos
+        ]
+        _raise_if_ids_do_not_match(
+            expected=card_ids,
+            actual=returned_card_ids,
+            label=f"{word}: cardsInfo",
+        )
         grouped: dict[str, list[int]] = {}
         seen_templates: set[str] = set()
-        for card in card_infos or []:
+        for card in card_infos:
             card_id = int(card.get("cardId") or card.get("card") or 0)
             template = _card_template_name(card)
             seen_templates.add(template)
@@ -969,7 +1052,9 @@ def route_trvs_chunk_cards(
         if priority == "focus" and CHUNK_RECALL_TEMPLATE not in seen_templates:
             raise AnkiImportError(f"{word}: focus note did not generate a Chunk Recall card")
         for deck, cards in grouped.items():
-            client.invoke("changeDeck", cards=cards, deck=deck)
+            all_grouped.setdefault(deck, []).extend(cards)
+    for deck, cards in all_grouped.items():
+        client.invoke("changeDeck", cards=cards, deck=deck)
 
 
 def upsert_dia_notes(
@@ -1072,7 +1157,8 @@ def main() -> int:
             raise AnkiImportError("Input file did not contain any notes.")
 
         use_priority_decks = priority_decks_enabled(args.model, args.no_priority_decks)
-        if args.model == STRUCTURED_VOCAB_MODEL and not args.no_priority_decks:
+        chunk_routing_enabled = args.model == STRUCTURED_VOCAB_MODEL and use_priority_decks
+        if chunk_routing_enabled:
             target_decks = {
                 deck_name
                 for note in raw_notes
@@ -1136,7 +1222,13 @@ def main() -> int:
                 f"with model '{args.model}'."
             )
             if payload_notes:
-                print(f"Target decks: {deck_counts_text(payload_notes)}.")
+                if chunk_routing_enabled:
+                    print(
+                        "Planned phrase chunk card decks: "
+                        f"{planned_chunk_deck_counts_text(payload_notes, args.deck)}."
+                    )
+                else:
+                    print(f"Target decks: {deck_counts_text(payload_notes)}.")
             if args.dia_upsert:
                 would_update = 0
                 would_add = 0
@@ -1199,7 +1291,13 @@ def main() -> int:
             print(
                 f"{STRUCTURED_VOCAB_MODEL} upsert: updated {updated_ct} note(s) "
                 f"(fields + tags, scheduling {'preserved' if args.preserve_progress_on_update else 'reset to new'}), "
-                f"added {imported} new note(s). Target decks: {deck_counts_text(payload_notes)}."
+                f"added {imported} new note(s). "
+                + (
+                    "Planned phrase chunk card decks: "
+                    f"{planned_chunk_deck_counts_text(payload_notes, args.deck)}."
+                    if chunk_routing_enabled
+                    else f"Target decks: {deck_counts_text(payload_notes)}."
+                )
             )
         else:
             note_ids = client.invoke("addNotes", notes=payload_notes)
@@ -1207,12 +1305,17 @@ def main() -> int:
             imported = len(affected_note_ids)
             print(
                 f"Imported {imported} notes using model '{args.model}'. "
-                f"Target decks: {deck_counts_text(payload_notes)}."
+                + (
+                    "Planned phrase chunk card decks: "
+                    f"{planned_chunk_deck_counts_text(payload_notes, args.deck)}."
+                    if chunk_routing_enabled
+                    else f"Target decks: {deck_counts_text(payload_notes)}."
+                )
             )
             if skipped_duplicates:
                 print(f"Skipped {skipped_duplicates} duplicate notes.")
 
-        if args.model == STRUCTURED_VOCAB_MODEL and use_priority_decks and not args.dry_run:
+        if chunk_routing_enabled and not args.dry_run:
             route_trvs_chunk_cards(client, affected_note_ids, base_deck=args.deck)
             print(
                 "Routed generated cards into phrase chunk decks for "
