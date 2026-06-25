@@ -21,8 +21,9 @@ from ankiconnect_import import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Update the existing TRVS-Lab Anki note type with the bundled front/back "
-            "templates and styling."
+            "Update the fresh-start TRVS-Lab Anki note type with bundled phrase chunk "
+            "fields, card templates, and styling. This version is not compatible with "
+            "old TRVS-Lab notes that lack phrase chunk fields."
         )
     )
     parser.add_argument(

@@ -846,10 +846,12 @@ def _template_map_from_spec(spec: dict[str, Any]) -> dict[str, dict[str, str]]:
 def _model_templates_need_update(templates: Any) -> bool:
     if not isinstance(templates, dict):
         return True
-    for template in templates.values():
-        if isinstance(template, dict) and "{{学习标记}}" in str(template.get("Back") or ""):
-            return False
-    return True
+    required = {CHUNK_ANCHOR_TEMPLATE, CHUNK_RECALL_TEMPLATE}
+    if not required.issubset(set(templates.keys())):
+        return True
+    anchor = str((templates.get(CHUNK_ANCHOR_TEMPLATE) or {}).get("Front") or "")
+    recall = str((templates.get(CHUNK_RECALL_TEMPLATE) or {}).get("Front") or "")
+    return "{{目标短语块}}" not in anchor or "{{短语块挖空}}" not in recall
 
 
 def _model_css_needs_update(styling: Any) -> bool:
@@ -857,7 +859,7 @@ def _model_css_needs_update(styling: Any) -> bool:
         css = str(styling.get("css") or "")
     else:
         css = str(styling or "")
-    return ".priority-marker" not in css
+    return ".chunk-main" not in css or ".priority-marker" not in css
 
 
 def ensure_structured_model_schema(
