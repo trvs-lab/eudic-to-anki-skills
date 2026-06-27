@@ -24,12 +24,38 @@ class TrvsModelSyncTests(unittest.TestCase):
         templates = {"Card 1": {"Front": "{{单词}}", "Back": "{{释义}}"}}
         self.assertTrue(ankiconnect_import._model_templates_need_update(templates))
 
-    def test_model_templates_do_not_need_update_when_chunk_templates_exist(self) -> None:
+    def test_model_templates_need_update_when_anchor_sentence_missing(self) -> None:
         templates = {
-            "Chunk Anchor": {"Front": "{{目标短语块}}", "Back": "{{FrontSide}}"},
+            "Chunk Anchor": {"Front": "{{目标短语块}}{{例句}}", "Back": "{{FrontSide}}"},
+            "Chunk Recall": {
+                "Front": "{{#短语块挖空}}{{短语块挖空}}{{/短语块挖空}}",
+                "Back": "{{目标短语块}}{{短语块例句}}",
+            },
+        }
+        self.assertTrue(ankiconnect_import._model_templates_need_update(templates))
+
+    def test_model_templates_need_update_when_chunk_back_fields_missing(self) -> None:
+        templates = {
+            "Chunk Anchor": {
+                "Front": "{{目标短语块}}{{短语块例句}}",
+                "Back": "{{FrontSide}}{{音标}}",
+            },
             "Chunk Recall": {
                 "Front": "{{#短语块挖空}}{{短语块挖空}}{{/短语块挖空}}",
                 "Back": "{{目标短语块}}",
+            },
+        }
+        self.assertTrue(ankiconnect_import._model_templates_need_update(templates))
+
+    def test_model_templates_do_not_need_update_when_chunk_templates_exist(self) -> None:
+        templates = {
+            "Chunk Anchor": {
+                "Front": "{{目标短语块}}{{短语块例句}}",
+                "Back": "{{FrontSide}}{{短语块锚点}}{{#例句}}{{例句}}{{/例句}}",
+            },
+            "Chunk Recall": {
+                "Front": "{{#短语块挖空}}{{短语块挖空}}{{/短语块挖空}}",
+                "Back": "{{目标短语块}}{{短语块例句}}",
             },
         }
         self.assertFalse(ankiconnect_import._model_templates_need_update(templates))

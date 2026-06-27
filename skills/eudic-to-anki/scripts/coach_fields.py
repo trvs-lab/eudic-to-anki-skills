@@ -14,6 +14,7 @@ LEARNING_PRIORITY_MARKERS = {
 }
 TARGET_CHUNK_KEYS = ("target_chunk", "目标短语块")
 TARGET_CHUNK_MEANING_KEYS = ("target_chunk_meaning", "短语块锚点")
+TARGET_CHUNK_SENTENCE_KEYS = ("target_chunk_sentence", "短语块例句")
 TARGET_CHUNK_CLOZE_KEYS = ("target_chunk_cloze", "短语块挖空")
 
 

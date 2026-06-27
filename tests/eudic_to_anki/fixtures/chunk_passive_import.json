@@ -18,6 +18,7 @@
       "learning_priority": "passive",
       "target_chunk": "distort the truth",
       "target_chunk_meaning": "歪曲事实",
+      "target_chunk_sentence": "Some reports distort the truth.",
       "target_chunk_cloze": ""
     }
   ]

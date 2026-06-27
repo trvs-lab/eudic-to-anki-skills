@@ -14,6 +14,7 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         spec = json.loads((ASSETS / "trvs_lab_model.json").read_text(encoding="utf-8"))
         self.assertIn("目标短语块", spec["fields"])
         self.assertIn("短语块锚点", spec["fields"])
+        self.assertIn("短语块例句", spec["fields"])
         self.assertIn("短语块挖空", spec["fields"])
 
     def test_model_spec_has_anchor_and_recall_templates(self) -> None:
@@ -27,9 +28,18 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         recall_front = (ASSETS / "trvs_lab_chunk_recall_front.html").read_text(encoding="utf-8")
         recall_back = (ASSETS / "trvs_lab_chunk_recall_back.html").read_text(encoding="utf-8")
         self.assertIn("{{目标短语块}}", anchor_front)
+        self.assertIn("{{短语块例句}}", anchor_front)
+        self.assertNotIn("{{例句}}", anchor_front)
         self.assertIn("{{FrontSide}}", anchor_back)
+        self.assertIn("{{短语块锚点}}", anchor_back)
+        self.assertIn("{{#例句}}", anchor_back)
+        self.assertIn("{{/例句}}", anchor_back)
+        self.assertLess(anchor_back.index("{{短语块锚点}}"), anchor_back.index("{{音标}}"))
+        self.assertLess(anchor_back.index("{{例句}}"), anchor_back.index("{{音标}}"))
         self.assertIn("{{#短语块挖空}}", recall_front)
+        self.assertLess(recall_front.index("{{短语块挖空}}"), recall_front.index("{{短语块锚点}}"))
         self.assertIn("{{目标短语块}}", recall_back)
+        self.assertIn("{{短语块例句}}", recall_back)
         self.assertNotIn("{{短语块锚点}}", recall_back)
 
     def test_model_referenced_assets_exist(self) -> None:
@@ -45,6 +55,8 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("document.createTreeWalker", anchor_front)
         self.assertIn("NodeFilter.SHOW_TEXT", anchor_front)
         self.assertIn("createHighlightNode", anchor_front)
+        self.assertNotIn("split(/\\s+/)", anchor_front)
+        self.assertIn("var phrase = chunk.textContent.trim()", anchor_front)
 
 
 if __name__ == "__main__":

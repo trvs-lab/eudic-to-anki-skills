@@ -8,12 +8,13 @@
 - `meaning` (non-empty array)
 - `english_definition` (non-empty, 简洁解释型英英释义)
 - `root`
-- `example`
+- `example` (string，来源例句；没有真实来源时为空字符串)
 - `collocations` (non-empty array)
 - `audio_html` (string, 可以为空)
 - `learning_priority` (string, 只能是 `focus` / `passive` / `ignore`)
 - `target_chunk` (string, 必填，主短语块锚点)
 - `target_chunk_meaning` (string, 必填，短语块中文锚点)
+- `target_chunk_sentence` (string, 必填，短语块学习例句，必须逐字包含 `target_chunk`)
 - `target_chunk_cloze` (string, `focus` 必填；`passive` / `ignore` 必须为空字符串)
 
 输入的 partial note 可能还带有 `source_context`，这是欧路导出的真实生词来源句。它不是 Anki 必填字段，但必须用于判断 `example`。
@@ -112,20 +113,29 @@
 - 正例：`造成严重伤害`、`突然失控`、`厌恶的表情`。
 - 反例：`vt. 造成；使承受`、`一种表示造成伤害的动词短语`。
 
+`target_chunk_sentence`
+
+- 每个 note 必填。
+- 这是卡片正面使用的学习句，不是来源例句。
+- 必须逐字包含 `target_chunk`；不要让标题学一个短语、句子练另一个短语。
+- 优先由 `word + source_context` 派生一个短、自然、干净的学习句；可以改写，不必逐字忠于原文。
+- 通常 6-14 个英文词，避免专名、复杂背景和额外难词。
+- 正例：`His quick reflexes helped him react in time.`
+- 反例：`Harry was ready, his Quidditch reflexes taking over.`（如果 `target_chunk` 是 `quick reflexes`，这句不包含目标短语块）
+
 `target_chunk_cloze`
 
 - `focus` note 必填，`passive` 和 `ignore` 必须写空字符串。
-- 必须是自然英文句子，并包含明显空格，如 `____`。
-- 正例：`The storm ____ serious damage on the town.`
+- 必须由 `target_chunk_sentence` 挖掉 `target_chunk` 得到，并包含明显空格，如 `____`。
+- 正例：`target_chunk_sentence = "The storm can inflict damage on a town."` 时，`target_chunk_cloze = "The storm can ____ a town."`
 - 反例：`____ damage on`、`inflict damage on`。
 
 `example`
 
-- 优先使用 `source_context`，因为它来自真实阅读场景，记忆钩子更强。
-- 如果 `source_context` 完整、自然、不太长，直接清理 HTML 后用作 `example`。
-- 如果 `source_context` 太长、噪音多、只截了半句或语法不完整，就改写成更短的句子，但保留原来的真实语境。
-- 如果没有 `source_context`，再造一个简洁自然的例句。
-- 例句必须是完整英文句子，不能空。
+- `example` 只表示真实来源例句，用于锚点卡背面出处/语境。
+- 有 `source_context` 时，清理 HTML 和明显噪声；若太长、截断或不自然，可以轻微完善，但必须保留真实来源语境。
+- 没有真实 `source_context` 时，`example` 写空字符串；不要为了填字段伪造来源例句。
+- 学习用例句写入 `target_chunk_sentence`，不要塞进 `example`。
 
 `collocations`
 
@@ -172,10 +182,11 @@
 - `meaning` 是否为非空数组，每一条是否带词性缩写，且中文是否简洁自然
 - `english_definition` 是否非空
 - `root` 是否满足上面的两种合法格式之一，是否没有把完整单词本身当作唯一分段，且没有整批偷懒写 `-`
-- `example` 是否遵守来源句优先原则
+- `example` 是否只在有真实来源时填写；无来源时是否保持空字符串
 - `collocations` 是否至少 2 条常见搭配
 - `audio_html` 可以在导入前为空，但最终 Anki 的 `发音` 字段必须由导入脚本生成 `[sound:...]`
 - `learning_priority` 是否存在，且只使用 `focus` / `passive` / `ignore`
 - `target_chunk` 和 `target_chunk_meaning` 是否存在，且是短语块级锚点
-- `focus` note 是否有自然句子形式的 `target_chunk_cloze`；`passive` / `ignore` note 是否把 `target_chunk_cloze` 留空
+- `target_chunk_sentence` 是否存在、自然，并逐字包含 `target_chunk`
+- `focus` note 是否有由 `target_chunk_sentence` 挖掉 `target_chunk` 得到的 `target_chunk_cloze`；`passive` / `ignore` note 是否把 `target_chunk_cloze` 留空
 - 若不合法，立即改写后再输出

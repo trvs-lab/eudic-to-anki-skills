@@ -22,6 +22,7 @@ from coach_fields import (
     TARGET_CHUNK_CLOZE_KEYS,
     TARGET_CHUNK_KEYS,
     TARGET_CHUNK_MEANING_KEYS,
+    TARGET_CHUNK_SENTENCE_KEYS,
     meaning_line_has_pos_prefix,
 )
 
@@ -76,6 +77,23 @@ def _meaning_body(line: str) -> str:
 
 def _english_word_count(text: str) -> int:
     return len(_EN_WORD_RE.findall(text))
+
+
+def _normalized_phrase_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text.strip()).casefold()
+
+
+def _normalized_cloze_text(text: str) -> str:
+    return _normalized_phrase_text(_CLOZE_BLANK_RE.sub("____", text))
+
+
+def _cloze_matches_chunk_sentence(sentence: str, chunk: str, cloze: str) -> bool:
+    normalized_sentence = _normalized_phrase_text(sentence)
+    normalized_chunk = _normalized_phrase_text(chunk)
+    if normalized_chunk not in normalized_sentence:
+        return False
+    expected = normalized_sentence.replace(normalized_chunk, "____", 1)
+    return _normalized_cloze_text(cloze) == expected
 
 
 def _root_token(text: str) -> str:
@@ -172,6 +190,13 @@ def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -
         word,
         errs,
     )
+    target_chunk_sentences = _phrase_chunk_text_fields(
+        note,
+        TARGET_CHUNK_SENTENCE_KEYS,
+        index,
+        word,
+        errs,
+    )
     target_chunk_clozes = _phrase_chunk_text_fields(
         note,
         TARGET_CHUNK_CLOZE_KEYS,
@@ -184,6 +209,18 @@ def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -
         errs.append(f"note[{index}] word={word!r}: target_chunk must not be empty")
     if not target_chunk_meanings:
         errs.append(f"note[{index}] word={word!r}: target_chunk_meaning must not be empty")
+    if not target_chunk_sentences:
+        errs.append(f"note[{index}] word={word!r}: target_chunk_sentence must not be empty")
+    for target_chunk in target_chunks:
+        normalized_chunk = _normalized_phrase_text(target_chunk)
+        if not any(
+            normalized_chunk in _normalized_phrase_text(sentence)
+            for sentence in target_chunk_sentences
+        ):
+            errs.append(
+                f"note[{index}] word={word!r}: target_chunk_sentence must contain "
+                f"target_chunk {target_chunk!r}"
+            )
     for target_chunk_meaning in target_chunk_meanings:
         if _CHINESE_POS_PREFIX_RE.match(target_chunk_meaning) or len(target_chunk_meaning) > 24:
             errs.append(
@@ -205,6 +242,15 @@ def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -
                     f"note[{index}] word={word!r}: target_chunk_cloze must be a natural "
                     f"sentence, got {target_chunk_cloze!r}"
                 )
+            elif not any(
+                _cloze_matches_chunk_sentence(sentence, target_chunk, target_chunk_cloze)
+                for sentence in target_chunk_sentences
+                for target_chunk in target_chunks
+            ):
+                errs.append(
+                    f"note[{index}] word={word!r}: target_chunk_cloze must be derived "
+                    "from target_chunk_sentence by blanking target_chunk"
+                )
     elif priority in {"passive", "ignore"} and target_chunk_clozes:
         errs.append(
             f"note[{index}] word={word!r}: {priority} notes must leave target_chunk_cloze empty"
@@ -219,7 +265,6 @@ def _check_note(
     *,
     require_ipa_slashes: bool,
     require_pronunciation: bool,
-    require_example: bool,
     min_collocations: int,
     max_meaning_chars: int,
     min_english_definition_words: int,
@@ -325,11 +370,6 @@ def _check_note(
                     f"note[{index}] word={w!r}: english_definition is too long for a concise "
                     f"learner definition ({wc} words > {max_english_definition_words}): {val!r}"
                 )
-        if key == "example" and isinstance(val, str) and not val.strip() and require_example:
-            errs.append(
-                f"note[{index}] word={w!r}: example must not be empty; use source_context when available"
-            )
-
     meanings = note.get("meaning")
     if meanings is not None:
         if not isinstance(meanings, list):
@@ -456,7 +496,7 @@ def main() -> int:
     parser.add_argument(
         "--allow-empty-example",
         action="store_true",
-        help="Allow empty example values (debug only).",
+        help="Deprecated compatibility flag; example is source-only and may be empty.",
     )
     parser.add_argument(
         "--min-collocations",
@@ -547,7 +587,6 @@ def main() -> int:
                 i,
                 require_ipa_slashes=require_slashes,
                 require_pronunciation=not args.allow_empty_pronunciation,
-                require_example=not args.allow_empty_example,
                 min_collocations=max(0, args.min_collocations),
                 max_meaning_chars=max(0, args.max_meaning_chars),
                 min_english_definition_words=max(0, args.min_english_definition_words),

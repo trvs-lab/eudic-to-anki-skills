@@ -20,6 +20,7 @@ from coach_fields import (
     TARGET_CHUNK_CLOZE_KEYS,
     TARGET_CHUNK_KEYS,
     TARGET_CHUNK_MEANING_KEYS,
+    TARGET_CHUNK_SENTENCE_KEYS,
     first_text_field,
     fuse_pos_into_meaning,
     learning_priority_marker,
@@ -46,10 +47,10 @@ TRVS_REQUIRED_FIELDS = (
     "释义",
     "英英",
     "词根",
-    "例句",
     "常用搭配",
     "目标短语块",
     "短语块锚点",
+    "短语块例句",
     "学习标记",
 )
 ROOT_PLACEHOLDERS = {"-", "无"}
@@ -535,6 +536,7 @@ def build_trvs_lab_fields(note: dict[str, Any], audio_html: str) -> dict[str, st
         "常用搭配": list_to_text(collocation_values, "<br>"),
         "目标短语块": first_text_field(note, TARGET_CHUNK_KEYS),
         "短语块锚点": first_text_field(note, TARGET_CHUNK_MEANING_KEYS),
+        "短语块例句": first_text_field(note, TARGET_CHUNK_SENTENCE_KEYS),
         "短语块挖空": first_text_field(note, TARGET_CHUNK_CLOZE_KEYS),
         "发音": audio_html or field_value(note, "发音", "audio_html"),
         "学习标记": note_learning_marker(note),
@@ -851,8 +853,17 @@ def _model_templates_need_update(templates: Any) -> bool:
     if not required.issubset(set(templates.keys())):
         return True
     anchor = str((templates.get(CHUNK_ANCHOR_TEMPLATE) or {}).get("Front") or "")
+    anchor_back = str((templates.get(CHUNK_ANCHOR_TEMPLATE) or {}).get("Back") or "")
     recall = str((templates.get(CHUNK_RECALL_TEMPLATE) or {}).get("Front") or "")
-    return "{{目标短语块}}" not in anchor or "{{短语块挖空}}" not in recall
+    recall_back = str((templates.get(CHUNK_RECALL_TEMPLATE) or {}).get("Back") or "")
+    return (
+        "{{目标短语块}}" not in anchor
+        or "{{短语块例句}}" not in anchor
+        or "{{短语块锚点}}" not in anchor_back
+        or "{{#例句}}" not in anchor_back
+        or "{{短语块挖空}}" not in recall
+        or "{{短语块例句}}" not in recall_back
+    )
 
 
 def _model_css_needs_update(styling: Any) -> bool:

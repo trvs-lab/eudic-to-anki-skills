@@ -5,9 +5,9 @@
 执行前先把 `<ABS_TEMP_DIR>` 替换成真实绝对目录，例如 `/Users/alice/Documents/eudic-to-anki-temp`。规则敏感命令必须直连执行；不要再包 `zsh -lc`，也不要和 `mkdir`、`cd`、`export` 用 `&&` 串接。
 
 1. 若目录不存在，先执行：`mkdir -p <ABS_TEMP_DIR>`
-2. agent 按 `references/word-coach-json-prompt.md` 生成 `<ABS_TEMP_DIR>/word_list_import.json`；没有来源句时才造简洁例句。
-3. 内容自查：确认没有空音标、空英英释义、空例句、空搭配、整批 `root: "-"`/`"无"`、整词伪词根（如 `crimson（深红）`）、过长/解释式中文释义、弱英英释义或单字母误选词。
+2. agent 按 `references/word-coach-json-prompt.md` 生成 `<ABS_TEMP_DIR>/word_list_import.json`；无来源句时 `example` 留空，但必须生成包含目标短语块的 `target_chunk_sentence`。
+3. 内容自查：确认没有空音标、空英英释义、空短语块例句、空搭配、整批 `root: "-"`/`"无"`、整词伪词根（如 `crimson（深红）`）、过长/解释式中文释义、弱英英释义或单字母误选词。
 4. 校验：`python3 scripts/validate_trvs_coach_json.py <ABS_TEMP_DIR>/word_list_import.json`
 5. dry-run：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/word_list_import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run`。确认输出里的 Planned phrase chunk card decks 包含 `words::chunk-anchor::focus/passive/ignore` 和 `words::chunk-recall::focus`。
 6. 导入（成功后默认同步；跳过加 `--no-sync`）：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/word_list_import.json --deck words --create-deck --dia-upsert --require-audio --verify-required-fields --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text \"{word}\" --output \"{output}\"'`
-7. 导入后抽查 Anki 实际字段：`音标/释义/英英/词根/例句/常用搭配/发音`。
+7. 导入后抽查 Anki 实际字段：`音标/释义/英英/词根/短语块例句/常用搭配/发音`；`例句` 只在有真实来源时出现。

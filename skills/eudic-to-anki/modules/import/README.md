@@ -27,11 +27,11 @@
   - `words::chunk-recall::focus`
 - 这是 fresh-start breaking upgrade；旧 `TRVS-Lab` note 不保证显示正确。升级前清空旧 note 或相关 deck。
 - `ignore` 只生成 `words::chunk-anchor::ignore` 锚点卡，不会默认挂起、跳过或排除；复习方式交给用户在 Anki 里决定。
-- Anchor 卡和 recall 卡是分开的模板与 deck，用于学习短语块，而不是孤立单词。
-- 不生成短语块专用音频；两类卡片都使用主单词音频。Recall 卡背面显示词级中文 `meaning`，不重复短语块锚点。
+- Anchor 卡和 recall 卡是分开的模板与 deck，用于学习短语块，而不是孤立单词。Anchor 正面显示目标短语块和 `短语块例句`；Anchor 背面先显示短语块意思，并且只在 `例句` 非空时显示来源例句。
+- 不生成短语块专用音频；两类卡片都使用主单词音频。Recall 正面先显示挖空句，再显示短语块中文意思；Recall 背面显示目标短语块、完整 `短语块例句`、词级中文 `meaning` 和 1-2 条搭配。
 - `TRVS-Lab` 导入会确保模型包含 `学习标记` 字段，并把 `learning_priority` 写入纯符号字段和稳定 tag：`priority::focus/passive/ignore`；卡片仅在背面以轻量提示显示该符号，不会再添加 `english`、`vocab`、`eudic`。
 - 音频为必填：真实导入必须带 `--require-audio`，并使用 `--audio-provider command` 或 `--audio-provider existing` 生成/保留 `[sound:...]`。
-- 导入后字段校验：真实导入加 `--verify-required-fields`，会回读 Anki note 并检查 `音标/释义/英英/词根/例句/常用搭配/发音`。
+- 导入后字段校验：真实导入加 `--verify-required-fields`，会回读 Anki note 并检查 `音标/释义/英英/词根/常用搭配/短语块例句/发音` 等必填字段；`例句` 是来源例句，可为空。
 - `--dia-upsert` 默认会在 base deck 和短语块卡片 deck 里按 `单词` 查旧 note，更新字段/标签，并按生成卡片类型路由到 chunk anchor / chunk recall deck；更新时默认重置为新卡。只有用户明确要求「不要重置学习进度」时，才加 `--preserve-progress-on-update` 保留学习进度。
 - 执行前先 dry-run，执行后抽查 Anki 实际字段。
 - 其中 `<ABS_TEMP_DIR>` 代表展开后的真实绝对目录，例如 `/Users/alice/Documents/eudic-to-anki-temp`

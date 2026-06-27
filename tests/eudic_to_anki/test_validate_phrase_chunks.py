@@ -27,7 +27,8 @@ def valid_note(**overrides: object) -> dict[str, object]:
         "learning_priority": "focus",
         "target_chunk": "inflict damage on",
         "target_chunk_meaning": "造成严重伤害",
-        "target_chunk_cloze": "The storm ____ serious damage on the town.",
+        "target_chunk_sentence": "The storm can inflict damage on a town.",
+        "target_chunk_cloze": "The storm can ____ a town.",
     }
     note.update(overrides)
     return note
@@ -50,14 +51,20 @@ class ValidatePhraseChunkTests(unittest.TestCase):
         result = self.run_validator(valid_note())
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_accepts_empty_source_example_when_chunk_sentence_exists(self) -> None:
+        result = self.run_validator(valid_note(example=""))
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_accepts_valid_alias_only_phrase_chunk_note(self) -> None:
         note = valid_note(
             目标短语块="inflict damage on",
             短语块锚点="造成严重伤害",
-            短语块挖空="The storm ____ serious damage on the town.",
+            短语块例句="The storm can inflict damage on a town.",
+            短语块挖空="The storm can ____ a town.",
         )
         del note["target_chunk"]
         del note["target_chunk_meaning"]
+        del note["target_chunk_sentence"]
         del note["target_chunk_cloze"]
 
         result = self.run_validator(note)
@@ -73,10 +80,29 @@ class ValidatePhraseChunkTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("target_chunk_meaning must not be empty", result.stderr)
 
+    def test_requires_target_chunk_sentence(self) -> None:
+        result = self.run_validator(valid_note(target_chunk_sentence=""))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("target_chunk_sentence must not be empty", result.stderr)
+
+    def test_rejects_chunk_sentence_without_target_chunk(self) -> None:
+        result = self.run_validator(
+            valid_note(target_chunk_sentence="The storm damaged the town.")
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("target_chunk_sentence must contain target_chunk", result.stderr)
+
     def test_requires_focus_cloze(self) -> None:
         result = self.run_validator(valid_note(target_chunk_cloze=""))
         self.assertEqual(result.returncode, 1)
         self.assertIn("focus notes need target_chunk_cloze", result.stderr)
+
+    def test_rejects_cloze_not_derived_from_chunk_sentence(self) -> None:
+        result = self.run_validator(
+            valid_note(target_chunk_cloze="The storm ____ serious damage on the town.")
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("target_chunk_cloze must be derived from target_chunk_sentence", result.stderr)
 
     def test_rejects_passive_cloze(self) -> None:
         result = self.run_validator(
@@ -174,6 +200,10 @@ class ValidatePhraseChunkTests(unittest.TestCase):
             ("target_chunk_meaning", {"meaning": "造成严重伤害"}),
             ("target_chunk_meaning", 456),
             ("target_chunk_meaning", {}),
+            ("target_chunk_sentence", ["The storm can inflict damage on a town."]),
+            ("target_chunk_sentence", {"sentence": "The storm can inflict damage on a town."}),
+            ("target_chunk_sentence", 456),
+            ("target_chunk_sentence", {}),
             ("target_chunk_cloze", ["[blank] damage on town"]),
             ("target_chunk_cloze", {"cloze": "[blank] damage on town"}),
             ("target_chunk_cloze", 456),
@@ -206,6 +236,13 @@ class ValidatePhraseChunkTests(unittest.TestCase):
                 result = self.run_validator(valid_note(短语块挖空=value))
                 self.assertEqual(result.returncode, 1)
                 self.assertIn("field '短语块挖空' must be a string", result.stderr)
+
+    def test_rejects_non_string_target_chunk_sentence_alias_even_with_valid_canonical(self) -> None:
+        for value in (["The storm can inflict damage on a town."], {}):
+            with self.subTest(value=type(value).__name__):
+                result = self.run_validator(valid_note(短语块例句=value))
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("field '短语块例句' must be a string", result.stderr)
 
 
 if __name__ == "__main__":

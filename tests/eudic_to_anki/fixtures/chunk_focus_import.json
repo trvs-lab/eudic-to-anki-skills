@@ -18,7 +18,8 @@
       "learning_priority": "focus",
       "target_chunk": "inflict damage on",
       "target_chunk_meaning": "造成严重伤害",
-      "target_chunk_cloze": "The storm ____ serious damage on the town."
+      "target_chunk_sentence": "The storm can inflict damage on a town.",
+      "target_chunk_cloze": "The storm can ____ a town."
     }
   ]
 }

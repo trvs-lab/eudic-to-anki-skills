@@ -52,7 +52,8 @@ class MergePhraseChunkTests(unittest.TestCase):
                                 "learning_priority": "focus",
                                 "target_chunk": "inflict damage on",
                                 "target_chunk_meaning": "造成严重伤害",
-                                "target_chunk_cloze": "The storm ____ serious damage on the town.",
+                                "target_chunk_sentence": "The storm can inflict damage on a town.",
+                                "target_chunk_cloze": "The storm can ____ a town.",
                             }
                         ]
                     }
@@ -79,8 +80,12 @@ class MergePhraseChunkTests(unittest.TestCase):
             self.assertEqual(note["target_chunk"], "inflict damage on")
             self.assertEqual(note["target_chunk_meaning"], "造成严重伤害")
             self.assertEqual(
+                note["target_chunk_sentence"],
+                "The storm can inflict damage on a town.",
+            )
+            self.assertEqual(
                 note["target_chunk_cloze"],
-                "The storm ____ serious damage on the town.",
+                "The storm can ____ a town.",
             )
 
     def test_merge_coach_with_partial_falls_back_to_alias_for_blank_chunk_fields(self) -> None:
@@ -123,8 +128,10 @@ class MergePhraseChunkTests(unittest.TestCase):
                                 "目标短语块": "anchor the discussion",
                                 "target_chunk_meaning": "   ",
                                 "短语块锚点": "固定讨论重点",
+                                "target_chunk_sentence": "   ",
+                                "短语块例句": "The remark helped anchor the discussion.",
                                 "target_chunk_cloze": "   ",
-                                "短语块挖空": "The remark ____ the whole discussion.",
+                                "短语块挖空": "The remark helped ____.",
                             }
                         ]
                     }
@@ -151,8 +158,12 @@ class MergePhraseChunkTests(unittest.TestCase):
             self.assertEqual(note["target_chunk"], "anchor the discussion")
             self.assertEqual(note["target_chunk_meaning"], "固定讨论重点")
             self.assertEqual(
+                note["target_chunk_sentence"],
+                "The remark helped anchor the discussion.",
+            )
+            self.assertEqual(
                 note["target_chunk_cloze"],
-                "The remark ____ the whole discussion.",
+                "The remark helped ____.",
             )
 
     def test_merge_minimal_week_import_preserves_phrase_chunk_fields(self) -> None:
@@ -187,6 +198,7 @@ class MergePhraseChunkTests(unittest.TestCase):
                             "learning_priority": "focus",
                             "target_chunk": "distort your judgment",
                             "target_chunk_meaning": "扭曲判断",
+                            "target_chunk_sentence": "Fear can distort your judgment.",
                             "target_chunk_cloze": "Fear can ____ your judgment.",
                         }
                     }
@@ -212,6 +224,7 @@ class MergePhraseChunkTests(unittest.TestCase):
             note = json.loads(output.read_text(encoding="utf-8"))["notes"][0]
             self.assertEqual(note["target_chunk"], "distort your judgment")
             self.assertEqual(note["target_chunk_meaning"], "扭曲判断")
+            self.assertEqual(note["target_chunk_sentence"], "Fear can distort your judgment.")
             self.assertEqual(note["target_chunk_cloze"], "Fear can ____ your judgment.")
 
 
