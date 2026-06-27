@@ -39,6 +39,8 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertLess(anchor_back.index("{{例句}}"), anchor_back.index("{{音标}}"))
         self.assertIn("{{#短语块挖空}}", recall_front)
         self.assertLess(recall_front.index("{{短语块挖空}}"), recall_front.index("{{短语块锚点}}"))
+        self.assertIn("recall-hint", recall_front)
+        self.assertIn("recall-blank", recall_front)
         self.assertIn("{{目标短语块}}", recall_back)
         self.assertIn("{{短语块例句}}", recall_back)
         self.assertNotIn("{{短语块锚点}}", recall_back)
@@ -58,6 +60,16 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("createHighlightNode", anchor_front)
         self.assertNotIn("split(/\\s+/)", anchor_front)
         self.assertIn("var phrase = chunk.textContent.trim()", anchor_front)
+
+    def test_recall_front_styles_keep_cloze_as_primary_prompt(self) -> None:
+        styling = (ASSETS / "trvs_lab_styling.css").read_text(encoding="utf-8")
+        self.assertIn("-webkit-font-smoothing: antialiased", styling)
+        self.assertIn(".chunk-recall-card .items + .items", styling)
+        self.assertIn(".chunk-recall-card .recall-cloze", styling)
+        self.assertIn("font-size: 22px", styling)
+        self.assertIn(".chunk-recall-card .recall-hint", styling)
+        self.assertIn("font-size: 17px", styling)
+        self.assertIn(".recall-blank", styling)
 
 
 if __name__ == "__main__":
