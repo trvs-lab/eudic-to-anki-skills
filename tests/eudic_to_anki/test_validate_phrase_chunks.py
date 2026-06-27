@@ -47,6 +47,15 @@ class ValidatePhraseChunkTests(unittest.TestCase):
                 stderr=subprocess.PIPE,
             )
 
+    def run_validator_path(self, path: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(VALIDATOR), str(path)],
+            cwd=SKILL,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
     def test_accepts_valid_focus_phrase_chunk_note(self) -> None:
         result = self.run_validator(valid_note())
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -90,7 +99,37 @@ class ValidatePhraseChunkTests(unittest.TestCase):
             valid_note(target_chunk_sentence="The storm damaged the town.")
         )
         self.assertEqual(result.returncode, 1)
-        self.assertIn("target_chunk_sentence must contain target_chunk", result.stderr)
+        self.assertIn(
+            "target_chunk_sentence must contain one of the provided target_chunk values",
+            result.stderr,
+        )
+
+    def test_rejects_chunk_sentence_that_only_contains_target_chunk_as_substring(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                target_chunk="quick reflex",
+                target_chunk_sentence="His quick reflexes helped him react in time.",
+                target_chunk_cloze="His ____es helped him react in time.",
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "target_chunk_sentence must contain one of the provided target_chunk values",
+            result.stderr,
+        )
+
+    def test_rejects_invalid_canonical_chunk_sentence_even_with_valid_alias(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                target_chunk_sentence="The storm damaged the town.",
+                短语块例句="The storm can inflict damage on a town.",
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "target_chunk_sentence must contain one of the provided target_chunk values",
+            result.stderr,
+        )
 
     def test_requires_focus_cloze(self) -> None:
         result = self.run_validator(valid_note(target_chunk_cloze=""))
@@ -243,6 +282,23 @@ class ValidatePhraseChunkTests(unittest.TestCase):
                 result = self.run_validator(valid_note(短语块例句=value))
                 self.assertEqual(result.returncode, 1)
                 self.assertIn("field '短语块例句' must be a string", result.stderr)
+
+    def test_phrase_chunk_fixture_files_validate(self) -> None:
+        fixtures = [
+            ROOT / "tests" / "eudic_to_anki" / "fixtures" / "chunk_focus_import.json",
+            ROOT / "tests" / "eudic_to_anki" / "fixtures" / "chunk_passive_import.json",
+        ]
+        for path in fixtures:
+            with self.subTest(path=path.name):
+                result = self.run_validator_path(path)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_passive_fixture_covers_empty_source_example(self) -> None:
+        path = ROOT / "tests" / "eudic_to_anki" / "fixtures" / "chunk_passive_import.json"
+        note = json.loads(path.read_text(encoding="utf-8"))["notes"][0]
+        self.assertEqual(note["example"], "")
+        result = self.run_validator_path(path)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

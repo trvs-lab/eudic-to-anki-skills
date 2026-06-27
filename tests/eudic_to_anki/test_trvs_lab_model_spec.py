@@ -35,6 +35,7 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("{{#例句}}", anchor_back)
         self.assertIn("{{/例句}}", anchor_back)
         self.assertLess(anchor_back.index("{{短语块锚点}}"), anchor_back.index("{{音标}}"))
+        self.assertLess(anchor_back.index("{{短语块锚点}}"), anchor_back.index("{{例句}}"))
         self.assertLess(anchor_back.index("{{例句}}"), anchor_back.index("{{音标}}"))
         self.assertIn("{{#短语块挖空}}", recall_front)
         self.assertLess(recall_front.index("{{短语块挖空}}"), recall_front.index("{{短语块锚点}}"))

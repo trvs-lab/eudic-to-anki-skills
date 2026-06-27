@@ -2,10 +2,10 @@
 """Validate TRVS-Lab coach JSON before AnkiConnect import.
 
 Catches common agent pipeline failures: UTF-8 replacement char (U+FFFD) in IPA,
-malformed pronunciation slashes, empty IPA/examples/collocations, overly explanatory
-Chinese meanings, empty or weak English definitions, whole-word pseudo-roots,
-all-placeholder roots, suspicious single-letter words, and invalid JSON. Run after
-writing <notes-json>, before `ankiconnect_import.py`.
+malformed pronunciation slashes, empty IPA/collocations/phrase chunk learning
+sentences, overly explanatory Chinese meanings, empty or weak English definitions,
+whole-word pseudo-roots, all-placeholder roots, suspicious single-letter words, and
+invalid JSON. Run after writing <notes-json>, before `ankiconnect_import.py`.
 """
 
 from __future__ import annotations
@@ -43,6 +43,7 @@ _ROOT_BANNED_EN_RE = re.compile(
 )
 _ROOT_PLACEHOLDERS = {"-", "无"}
 _ROOT_TOKEN_CLEAN_RE = re.compile(r"[^a-z0-9]+", re.I)
+_PHRASE_EDGE_CHARS = "A-Za-z0-9'-"
 _CLOZE_BLANK_RE = re.compile(r"_{2,}|\[[^\]]*blank[^\]]*\]|\bblank\b", re.I)
 _CHINESE_POS_PREFIX_RE = re.compile(r"^[a-z]{1,12}\.\s*", re.I)
 REQUIRED_KEYS = (
@@ -87,12 +88,21 @@ def _normalized_cloze_text(text: str) -> str:
     return _normalized_phrase_text(_CLOZE_BLANK_RE.sub("____", text))
 
 
+def _phrase_span_pattern(chunk: str) -> re.Pattern[str]:
+    escaped = re.escape(_normalized_phrase_text(chunk)).replace(r"\ ", r"\s+")
+    return re.compile(rf"(?<![{_PHRASE_EDGE_CHARS}]){escaped}(?![{_PHRASE_EDGE_CHARS}])")
+
+
+def _contains_phrase_span(text: str, chunk: str) -> bool:
+    return bool(_phrase_span_pattern(chunk).search(_normalized_phrase_text(text)))
+
+
 def _cloze_matches_chunk_sentence(sentence: str, chunk: str, cloze: str) -> bool:
     normalized_sentence = _normalized_phrase_text(sentence)
-    normalized_chunk = _normalized_phrase_text(chunk)
-    if normalized_chunk not in normalized_sentence:
+    pattern = _phrase_span_pattern(chunk)
+    if not pattern.search(normalized_sentence):
         return False
-    expected = normalized_sentence.replace(normalized_chunk, "____", 1)
+    expected = pattern.sub("____", normalized_sentence, count=1)
     return _normalized_cloze_text(cloze) == expected
 
 
@@ -212,14 +222,22 @@ def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -
     if not target_chunk_sentences:
         errs.append(f"note[{index}] word={word!r}: target_chunk_sentence must not be empty")
     for target_chunk in target_chunks:
-        normalized_chunk = _normalized_phrase_text(target_chunk)
         if not any(
-            normalized_chunk in _normalized_phrase_text(sentence)
+            _contains_phrase_span(sentence, target_chunk)
             for sentence in target_chunk_sentences
         ):
             errs.append(
                 f"note[{index}] word={word!r}: target_chunk_sentence must contain "
                 f"target_chunk {target_chunk!r}"
+            )
+    for target_chunk_sentence in target_chunk_sentences:
+        if not any(
+            _contains_phrase_span(target_chunk_sentence, target_chunk)
+            for target_chunk in target_chunks
+        ):
+            errs.append(
+                f"note[{index}] word={word!r}: target_chunk_sentence must contain "
+                "one of the provided target_chunk values"
             )
     for target_chunk_meaning in target_chunk_meanings:
         if _CHINESE_POS_PREFIX_RE.match(target_chunk_meaning) or len(target_chunk_meaning) > 24:

@@ -4,7 +4,7 @@
 The default `eudic-to-anki` skill path is agent-written IPA only; this helper still
 applies Eudic `phon` when building from `minimal_coach_week.json` unless you change it to rely on
 agent-filled `pronunciation` in the mapping instead. It also preserves `context_line` as
-`source_context` for source-first examples.
+`source_context` for source-only examples.
 """
 from __future__ import annotations
 

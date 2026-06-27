@@ -23,7 +23,7 @@ npx skills add trvs-lab/eudic-to-anki-skills --skill eudic-to-anki -g -y
 
 - 导入成功后 `ankiconnect_import.py` **默认**会调用 Anki 同步（AnkiConnect `sync`）；不需要同步时加 `--no-sync`。
 - `--deck words` 是 base deck；`TRVS-Lab` 会按生成卡片分流到 `words::chunk-anchor::focus/passive/ignore` 和 `words::chunk-recall::focus`。这是 fresh-start chunk routing；旧的 `TRVS-Lab` note 若没有短语块字段，不支持新模板。
-- 最终导入前必须通过内容质量校验：完整 IPA、简洁中文释义、通俗解释型英英释义、来源例句语义、包含目标短语块的学习句、词根词缀拆解、常用搭配。
+- 最终导入前必须通过内容质量校验：完整 IPA、简洁中文释义、通俗解释型英英释义、词根词缀拆解、常用搭配；`example` 只表示真实来源例句且可为空，`target_chunk_sentence` 必填且必须包含 `target_chunk`，`focus` 的 `target_chunk_cloze` 必须由这条学习句挖掉目标短语块得到。
 - 环境检查：`bash scripts/check_env.sh`
 - 列分类：`python3 scripts/eudic_export.py --list-categories`
 - Anki 连通性：`python3 scripts/ankiconnect_import.py --ping`
