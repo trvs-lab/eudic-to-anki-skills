@@ -864,7 +864,9 @@ def _model_templates_need_update(templates: Any) -> bool:
         or "{{短语块挖空}}" not in recall
         or "recall-hint" not in recall
         or "recall-blank" not in recall
-        or "{{短语块例句}}" not in recall_back
+        or "{{目标短语块}}" not in recall_back
+        or "recall-answer-head" not in recall_back
+        or "{{#例句}}" not in recall_back
     )
 
 
@@ -878,6 +880,7 @@ def _model_css_needs_update(styling: Any) -> bool:
         or ".priority-marker" not in css
         or ".chunk-recall-card .recall-hint" not in css
         or ".recall-blank" not in css
+        or ".chunk-recall-answer .recall-answer-head" not in css
     )
 
 

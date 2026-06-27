@@ -55,7 +55,7 @@ class TrvsModelSyncTests(unittest.TestCase):
             },
             "Chunk Recall": {
                 "Front": "{{#短语块挖空}}{{短语块挖空}} recall-hint recall-blank{{/短语块挖空}}",
-                "Back": "{{目标短语块}}{{短语块例句}}",
+                "Back": "{{目标短语块}}{{#例句}}{{例句}}{{/例句}} recall-answer-head",
             },
         }
         self.assertFalse(ankiconnect_import._model_templates_need_update(templates))
@@ -80,7 +80,8 @@ class TrvsModelSyncTests(unittest.TestCase):
         self.assertFalse(
             ankiconnect_import._model_css_needs_update(
                 ".chunk-main{} .priority-marker{} "
-                ".chunk-recall-card .recall-hint{} .recall-blank{}"
+                ".chunk-recall-card .recall-hint{} .recall-blank{} "
+                ".chunk-recall-answer .recall-answer-head{}"
             )
         )
 

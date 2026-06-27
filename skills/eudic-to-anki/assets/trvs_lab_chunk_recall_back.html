@@ -1,10 +1,12 @@
 {{FrontSide}}
 <div class="section bounceInUp chunk-answer chunk-recall-answer">
-  <div class="items chunk-head">
+  <div class="items chunk-head recall-answer-head">
     <span class="chunk-main">{{目标短语块}}</span>
     <span class="audio block">{{发音}}</span>
   </div>
-  <div class="items chunk-example">{{短语块例句}}</div>
+  {{#例句}}
+    <div class="items source-example">{{例句}}</div>
+  {{/例句}}
   <div class="items phenic">{{音标}}</div>
   <div class="items meaning-row"><span class="type">{{释义}}</span></div>
   <div class="items collocations-field recall-collocations">{{常用搭配}}</div>

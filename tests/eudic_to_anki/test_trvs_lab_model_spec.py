@@ -42,8 +42,10 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("recall-hint", recall_front)
         self.assertIn("recall-blank", recall_front)
         self.assertIn("{{目标短语块}}", recall_back)
-        self.assertIn("{{短语块例句}}", recall_back)
+        self.assertNotIn("{{短语块例句}}", recall_back)
+        self.assertIn("{{#例句}}", recall_back)
         self.assertNotIn("{{短语块锚点}}", recall_back)
+        self.assertIn("recall-answer-head", recall_back)
 
     def test_model_referenced_assets_exist(self) -> None:
         spec = json.loads((ASSETS / "trvs_lab_model.json").read_text(encoding="utf-8"))
@@ -68,8 +70,11 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn(".chunk-recall-card .recall-cloze", styling)
         self.assertIn("font-size: 22px", styling)
         self.assertIn(".chunk-recall-card .recall-hint", styling)
-        self.assertIn("font-size: 17px", styling)
+        self.assertIn("font-size: 18px", styling)
+        self.assertIn("background: transparent", styling)
         self.assertIn(".recall-blank", styling)
+        self.assertIn("border-bottom: 0", styling)
+        self.assertIn(".chunk-recall-answer .recall-answer-head", styling)
 
 
 if __name__ == "__main__":
