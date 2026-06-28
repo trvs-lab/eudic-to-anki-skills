@@ -73,13 +73,35 @@ class TrvsLabModelSpecTests(unittest.TestCase):
 
     def test_recall_front_styles_keep_cloze_as_primary_prompt(self) -> None:
         styling = (ASSETS / "trvs_lab_styling.css").read_text(encoding="utf-8")
+        self.assertIn("trvs-style-version: source-readable-recall-compact-v1", styling)
         self.assertIn("-webkit-font-smoothing: antialiased", styling)
         self.assertIn("overflow-x: hidden", styling)
+        self.assertIn(".source-example", styling)
+        self.assertIn(".english-definition", styling)
         self.assertIn(".chunk-recall-card .items + .items", styling)
         self.assertIn(".chunk-recall-card {", styling)
         self.assertIn("padding-bottom: 4px", styling)
         self.assertIn(".chunk-recall-card .recall-cloze", styling)
-        self.assertIn("font-size: 22px", styling)
+        self.assertIn(
+            ".chunk-recall-card .recall-cloze {\n"
+            "  color: rgba(0, 0, 0, 0.84);\n"
+            "  font-size: 20px;\n"
+            "  font-weight: 500;\n"
+            "  line-height: 1.45;",
+            styling,
+        )
+        self.assertIn(
+            ".source-example {\n"
+            "  color: rgba(0, 0, 0, 0.82);\n"
+            "  font-size: 20px;",
+            styling,
+        )
+        self.assertIn(
+            ".english-definition {\n"
+            "  color: rgba(0, 0, 0, 0.58);\n"
+            "  font-size: 18px;",
+            styling,
+        )
         self.assertIn(".chunk-recall-card .recall-hint", styling)
         self.assertIn("font-size: 18px", styling)
         self.assertIn("background: transparent", styling)

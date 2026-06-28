@@ -888,6 +888,7 @@ def _model_css_needs_update(styling: Any) -> bool:
         or ".chunk-recall-answer .recall-answer-head" not in css
         or ".chunk-answer .phrase-confirmation" not in css
         or ".word-header" not in css
+        or "trvs-style-version: source-readable-recall-compact-v1" not in css
         or "overflow-x: hidden" not in css
         or "padding-bottom: 4px" not in css
         or "margin-bottom: 2px" not in css

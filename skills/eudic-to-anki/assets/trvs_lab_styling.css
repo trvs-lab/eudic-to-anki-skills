@@ -1,3 +1,5 @@
+/* trvs-style-version: source-readable-recall-compact-v1 */
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -162,8 +164,8 @@ b {
 }
 
 .source-example {
-  color: rgba(0, 0, 0, 0.66);
-  font-size: 18px;
+  color: rgba(0, 0, 0, 0.82);
+  font-size: 20px;
   line-height: 1.45;
   white-space: pre-wrap;
 }
@@ -204,6 +206,8 @@ b {
 }
 
 .english-definition {
+  color: rgba(0, 0, 0, 0.58);
+  font-size: 18px;
   line-height: 1.45;
 }
 
@@ -217,9 +221,9 @@ b {
 
 .chunk-recall-card .recall-cloze {
   color: rgba(0, 0, 0, 0.84);
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.45;
   padding-bottom: 4px;
 }
 

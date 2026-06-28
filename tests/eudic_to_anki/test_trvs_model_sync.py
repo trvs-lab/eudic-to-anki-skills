@@ -89,6 +89,7 @@ class TrvsModelSyncTests(unittest.TestCase):
                 ".chunk-recall-card .recall-hint{} .recall-blank{} "
                 ".chunk-recall-answer .recall-answer-head{} "
                 ".chunk-answer .phrase-confirmation{} .word-header{} "
+                "/* trvs-style-version: source-readable-recall-compact-v1 */ "
                 "body{overflow-x: hidden;} "
                 ".chunk-recall-card{padding-bottom: 4px;} "
                 ".chunk-recall-card .recall-hint{margin-bottom: 2px;}"
