@@ -77,7 +77,7 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("overflow-x: hidden", styling)
         self.assertIn(".chunk-recall-card .items + .items", styling)
         self.assertIn(".chunk-recall-card {", styling)
-        self.assertIn("padding-bottom: 10px", styling)
+        self.assertIn("padding-bottom: 4px", styling)
         self.assertIn(".chunk-recall-card .recall-cloze", styling)
         self.assertIn("font-size: 22px", styling)
         self.assertIn(".chunk-recall-card .recall-hint", styling)

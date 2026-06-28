@@ -208,7 +208,7 @@ b {
 }
 
 .chunk-recall-card {
-  padding-bottom: 10px;
+  padding-bottom: 4px;
 }
 
 .chunk-recall-card .items + .items {
@@ -225,7 +225,7 @@ b {
 
 .chunk-recall-card .recall-hint {
   margin-top: 0;
-  margin-bottom: 12px;
+  margin-bottom: 2px;
   padding: 1px 0 4px;
   border-left: 0;
   background: transparent;
