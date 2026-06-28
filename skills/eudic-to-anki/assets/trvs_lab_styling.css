@@ -11,6 +11,8 @@ html {
   font-size: 20px;
   background-color: #f0f0f0;
   color: #333333;
+  max-width: 100%;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -23,6 +25,8 @@ b {
   border-radius: 13px;
   background-color: #ffffff;
   margin: 10px 2px;
+  max-width: 100%;
+  overflow-x: hidden;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.04),
     0 2px 8px rgba(0, 0, 0, 0.08);
@@ -32,12 +36,14 @@ b {
 }
 
 .items + .items {
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.055);
 }
 
 .items {
   margin: 0 14px;
   padding: 10px 0 8px 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .priority-row {
@@ -131,10 +137,13 @@ b {
 
 .chunk-main {
   display: inline-block;
+  max-width: 100%;
   font-family: courier, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 25px;
   font-weight: 800;
   line-height: 1.15;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .chunk-example,
@@ -159,8 +168,47 @@ b {
   white-space: pre-wrap;
 }
 
+.chunk-answer .phrase-confirmation {
+  color: rgba(0, 0, 0, 0.72);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .chunk-answer .chunk-main {
   font-size: 23px;
+}
+
+.word-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  line-height: 1.35;
+}
+
+.word-header-word {
+  color: rgba(0, 0, 0, 0.82);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.word-header-ipa {
+  color: rgba(0, 0, 0, 0.56);
+  font-size: 18px;
+}
+
+.word-header-meaning {
+  color: rgba(0, 0, 0, 0.78);
+  font-size: 20px;
+}
+
+.english-definition {
+  line-height: 1.45;
+}
+
+.chunk-recall-card {
+  padding-bottom: 10px;
 }
 
 .chunk-recall-card .items + .items {

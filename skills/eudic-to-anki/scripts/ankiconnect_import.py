@@ -859,12 +859,17 @@ def _model_templates_need_update(templates: Any) -> bool:
     return (
         "{{目标短语块}}" not in anchor
         or "{{短语块例句}}" not in anchor
+        or "phrase-confirmation" not in anchor_back
+        or "word-header" not in anchor_back
+        or "{{单词}}" not in anchor_back
         or "{{短语块锚点}}" not in anchor_back
         or "{{#例句}}" not in anchor_back
         or "{{短语块挖空}}" not in recall
         or "recall-hint" not in recall
         or "recall-blank" not in recall
         or "{{目标短语块}}" not in recall_back
+        or "word-header" not in recall_back
+        or "{{单词}}" not in recall_back
         or "recall-answer-head" not in recall_back
         or "{{#例句}}" not in recall_back
     )
@@ -881,6 +886,9 @@ def _model_css_needs_update(styling: Any) -> bool:
         or ".chunk-recall-card .recall-hint" not in css
         or ".recall-blank" not in css
         or ".chunk-recall-answer .recall-answer-head" not in css
+        or ".chunk-answer .phrase-confirmation" not in css
+        or ".word-header" not in css
+        or "overflow-x: hidden" not in css
     )
 
 

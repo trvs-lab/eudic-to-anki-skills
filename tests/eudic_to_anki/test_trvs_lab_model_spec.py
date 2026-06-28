@@ -31,12 +31,16 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("{{短语块例句}}", anchor_front)
         self.assertNotIn("{{例句}}", anchor_front)
         self.assertIn("{{FrontSide}}", anchor_back)
+        self.assertIn("phrase-confirmation", anchor_back)
         self.assertIn("{{短语块锚点}}", anchor_back)
         self.assertIn("{{#例句}}", anchor_back)
         self.assertIn("{{/例句}}", anchor_back)
-        self.assertLess(anchor_back.index("{{短语块锚点}}"), anchor_back.index("{{音标}}"))
+        self.assertIn("word-header", anchor_back)
+        self.assertIn("{{单词}}", anchor_back)
+        self.assertLess(anchor_back.index("{{单词}}"), anchor_back.index("{{音标}}"))
+        self.assertLess(anchor_back.index("{{音标}}"), anchor_back.index("{{释义}}"))
         self.assertLess(anchor_back.index("{{短语块锚点}}"), anchor_back.index("{{例句}}"))
-        self.assertLess(anchor_back.index("{{例句}}"), anchor_back.index("{{音标}}"))
+        self.assertLess(anchor_back.index("{{例句}}"), anchor_back.index("{{单词}}"))
         self.assertIn("{{#短语块挖空}}", recall_front)
         self.assertLess(recall_front.index("{{短语块挖空}}"), recall_front.index("{{短语块锚点}}"))
         self.assertIn("recall-hint", recall_front)
@@ -46,6 +50,10 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("{{#例句}}", recall_back)
         self.assertNotIn("{{短语块锚点}}", recall_back)
         self.assertIn("recall-answer-head", recall_back)
+        self.assertIn("word-header", recall_back)
+        self.assertIn("{{单词}}", recall_back)
+        self.assertLess(recall_back.index("{{单词}}"), recall_back.index("{{音标}}"))
+        self.assertLess(recall_back.index("{{音标}}"), recall_back.index("{{释义}}"))
 
     def test_model_referenced_assets_exist(self) -> None:
         spec = json.loads((ASSETS / "trvs_lab_model.json").read_text(encoding="utf-8"))
@@ -66,7 +74,10 @@ class TrvsLabModelSpecTests(unittest.TestCase):
     def test_recall_front_styles_keep_cloze_as_primary_prompt(self) -> None:
         styling = (ASSETS / "trvs_lab_styling.css").read_text(encoding="utf-8")
         self.assertIn("-webkit-font-smoothing: antialiased", styling)
+        self.assertIn("overflow-x: hidden", styling)
         self.assertIn(".chunk-recall-card .items + .items", styling)
+        self.assertIn(".chunk-recall-card {", styling)
+        self.assertIn("padding-bottom: 10px", styling)
         self.assertIn(".chunk-recall-card .recall-cloze", styling)
         self.assertIn("font-size: 22px", styling)
         self.assertIn(".chunk-recall-card .recall-hint", styling)
@@ -75,6 +86,9 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn(".recall-blank", styling)
         self.assertIn("border-bottom: 0", styling)
         self.assertIn(".chunk-recall-answer .recall-answer-head", styling)
+        self.assertIn(".chunk-answer .phrase-confirmation", styling)
+        self.assertIn(".word-header", styling)
+        self.assertIn("overflow-wrap: anywhere", styling)
 
 
 if __name__ == "__main__":

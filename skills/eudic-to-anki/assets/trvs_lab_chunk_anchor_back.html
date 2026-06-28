@@ -1,12 +1,15 @@
 {{FrontSide}}
-<div class="section bounceInUp chunk-answer">
-  <div class="items chunk-meaning">{{短语块锚点}}</div>
+<div class="section bounceInUp chunk-answer chunk-anchor-answer">
+  <div class="items phrase-confirmation">{{短语块锚点}}</div>
   {{#例句}}
     <div class="items source-example">{{例句}}</div>
   {{/例句}}
-  <div class="items phenic">{{音标}}</div>
-  <div class="items meaning-row"><span class="type">{{释义}}</span></div>
-  <div class="items">{{英英}}</div>
+  <div class="items word-header">
+    <span class="word-header-word">{{单词}}</span>
+    <span class="word-header-ipa">{{音标}}</span>
+    <span class="word-header-meaning type">{{释义}}</span>
+  </div>
+  <div class="items english-definition">{{英英}}</div>
   {{#词根}}
     <div class="items root-field">{{词根}}</div>
   {{/词根}}
@@ -44,7 +47,7 @@
     div.innerHTML = div.innerHTML.replace(/\b[a-z]+\./g, function(symbol) {
       if (colorMap[symbol]) {
         return '<a style="font-family:Georgia;font-style:italic;font-weight:bold;color:' +
-          colorMap[symbol] + ';border-radius:4px;padding:0 3px;margin-right:2px;">' +
+          colorMap[symbol] + ';padding:0;margin-right:3px;">' +
           symbol + "</a>";
       }
       return symbol;

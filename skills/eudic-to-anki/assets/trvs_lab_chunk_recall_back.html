@@ -7,13 +7,49 @@
   {{#例句}}
     <div class="items source-example">{{例句}}</div>
   {{/例句}}
-  <div class="items phenic">{{音标}}</div>
-  <div class="items meaning-row"><span class="type">{{释义}}</span></div>
+  <div class="items word-header">
+    <span class="word-header-word">{{单词}}</span>
+    <span class="word-header-ipa">{{音标}}</span>
+    <span class="word-header-meaning type">{{释义}}</span>
+  </div>
   <div class="items collocations-field recall-collocations">{{常用搭配}}</div>
 </div>
 
 <script>
 (function() {
+  var colorMap = {
+    "n.":"#86c440",
+    "a.":"#f8b002",
+    "adj.":"#727272",
+    "ad.":"#684b9d",
+    "adv.":"#684b9d",
+    "v.":"#479cdf",
+    "vi.":"#3e480d",
+    "vt.":"#3e480d",
+    "prep.":"#04B7C9",
+    "conj.":"#04B7C9",
+    "pron.":"#04B7C9",
+    "art.":"#04B7C9",
+    "num.":"#04B7C9",
+    "int.":"#04B7C9",
+    "interj.":"#04B7C9",
+    "modal.":"#04B7C9",
+    "aux.":"#04B7C9",
+    "pl.":"#D111D3",
+    "abbr.":"#D111D3",
+    "na.":"#04B7C9"
+  };
+  [].forEach.call(document.querySelectorAll(".type"), function(div) {
+    div.innerHTML = div.innerHTML.replace(/\b[a-z]+\./g, function(symbol) {
+      if (colorMap[symbol]) {
+        return '<a style="font-family:Georgia;font-style:italic;font-weight:bold;color:' +
+          colorMap[symbol] + ';padding:0;margin-right:3px;">' +
+          symbol + "</a>";
+      }
+      return symbol;
+    });
+  });
+
   var field = document.querySelector(".recall-collocations");
   if (!field) {
     return;

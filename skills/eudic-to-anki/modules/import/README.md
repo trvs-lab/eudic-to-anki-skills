@@ -27,8 +27,8 @@
   - `words::chunk-recall::focus`
 - 这是 fresh-start breaking upgrade；旧 `TRVS-Lab` note 不保证显示正确。升级前清空旧 note 或相关 deck。
 - `ignore` 只生成 `words::chunk-anchor::ignore` 锚点卡，不会默认挂起、跳过或排除；复习方式交给用户在 Anki 里决定。
-- Anchor 卡和 recall 卡是分开的模板与 deck，用于学习短语块，而不是孤立单词。Anchor 正面显示目标短语块和 `短语块例句`；Anchor 背面先显示短语块意思，并且只在 `例句` 非空时显示来源例句。
-- 不生成短语块专用音频；两类卡片都使用主单词音频。Recall 正面先显示挖空句，再显示短语块中文意思；Recall 背面左对齐显示目标短语块，只在 `例句` 非空时显示来源例句，并显示词级中文 `meaning` 和 1-2 条搭配。
+- Anchor 卡和 recall 卡是分开的模板与 deck，用于学习短语块，而不是孤立单词。Anchor 正面显示目标短语块和 `短语块例句`；Anchor 背面先轻量显示短语块意思，只在 `例句` 非空时显示来源例句，然后用紧凑词头合并显示 `单词`、`音标` 和词级中文 `meaning`。
+- 不生成短语块专用音频；两类卡片都使用主单词音频。Recall 正面先显示挖空句，再显示短语块中文意思；Recall 背面左对齐显示目标短语块，只在 `例句` 非空时显示来源例句，并用同一套紧凑词头显示 `单词`、`音标`、词级中文 `meaning` 和 1-2 条搭配。
 - `TRVS-Lab` 导入会确保模型包含 `学习标记` 字段，并把 `learning_priority` 写入纯符号字段和稳定 tag：`priority::focus/passive/ignore`；卡片仅在背面以轻量提示显示该符号，不会再添加 `english`、`vocab`、`eudic`。
 - 音频为必填：真实导入必须带 `--require-audio`，并使用 `--audio-provider command` 或 `--audio-provider existing` 生成/保留 `[sound:...]`。
 - 导入后字段校验：真实导入加 `--verify-required-fields`，会回读 Anki note 并检查 `音标/释义/英英/词根/常用搭配/短语块例句/发音` 等必填字段；`例句` 是来源例句，可为空。
