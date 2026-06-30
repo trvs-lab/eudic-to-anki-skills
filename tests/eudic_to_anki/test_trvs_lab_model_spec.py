@@ -39,8 +39,8 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("{{单词}}", anchor_back)
         self.assertLess(anchor_back.index("{{单词}}"), anchor_back.index("{{音标}}"))
         self.assertLess(anchor_back.index("{{音标}}"), anchor_back.index("{{释义}}"))
-        self.assertLess(anchor_back.index("{{短语块锚点}}"), anchor_back.index("{{例句}}"))
-        self.assertLess(anchor_back.index("{{例句}}"), anchor_back.index("{{单词}}"))
+        self.assertLess(anchor_back.index("{{短语块锚点}}"), anchor_back.index("{{单词}}"))
+        self.assertLess(anchor_back.index("{{单词}}"), anchor_back.index("{{例句}}"))
         self.assertIn("{{#短语块挖空}}", recall_front)
         self.assertLess(recall_front.index("{{短语块挖空}}"), recall_front.index("{{短语块锚点}}"))
         self.assertIn("recall-hint", recall_front)
@@ -54,6 +54,8 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("{{单词}}", recall_back)
         self.assertLess(recall_back.index("{{单词}}"), recall_back.index("{{音标}}"))
         self.assertLess(recall_back.index("{{音标}}"), recall_back.index("{{释义}}"))
+        self.assertLess(recall_back.index("{{目标短语块}}"), recall_back.index("{{单词}}"))
+        self.assertLess(recall_back.index("{{单词}}"), recall_back.index("{{例句}}"))
 
     def test_model_referenced_assets_exist(self) -> None:
         spec = json.loads((ASSETS / "trvs_lab_model.json").read_text(encoding="utf-8"))
@@ -98,8 +100,8 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         )
         self.assertIn(
             ".english-definition {\n"
-            "  color: rgba(0, 0, 0, 0.58);\n"
-            "  font-size: 18px;",
+            "  color: rgba(0, 0, 0, 0.82);\n"
+            "  font-size: 20px;",
             styling,
         )
         self.assertIn(".chunk-recall-card .recall-hint", styling)
