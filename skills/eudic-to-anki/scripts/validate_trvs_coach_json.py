@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Validate TRVS-Lab coach JSON before AnkiConnect import.
-
-Catches common agent pipeline failures: UTF-8 replacement char (U+FFFD) in IPA,
-malformed pronunciation slashes, empty IPA/collocations/phrase chunk learning
-sentences, overly explanatory Chinese meanings, empty or weak English definitions,
-whole-word pseudo-roots, all-placeholder roots, suspicious single-letter words, and
-invalid JSON. Run after writing <notes-json>, before `ankiconnect_import.py`.
-"""
+"""Validate agent-authored Context Anchor JSON before Anki import."""
 
 from __future__ import annotations
 
@@ -18,620 +11,288 @@ from pathlib import Path
 from typing import Any
 
 from coach_fields import (
-    LEARNING_PRIORITY_VALUES,
-    TARGET_CHUNK_CLOZE_KEYS,
-    TARGET_CHUNK_KEYS,
-    TARGET_CHUNK_MEANING_KEYS,
-    TARGET_CHUNK_SENTENCE_KEYS,
+    LEARNING_GROUP_VALUES,
+    SENTENCE_ORIGIN_VALUES,
     meaning_line_has_pos_prefix,
+    normalize_word_key,
 )
 
 REPLACEMENT = "\ufffd"
-# CJK + common extension blocks; root with morphological "+" must include a Chinese gloss (skill rule).
-_CJK_RE = re.compile(r"[\u3007\u3400-\u4dbf\u4e00-\u9fff\U00020000-\U0002ceaf\U00030000-\U000323af]")
-_MOJIBAKE_MARKERS = ("Ã", "Â", "Ð", "Ñ")
-_MEANING_POS_RE = re.compile(r"^[a-z]{1,12}\.\s*", re.I)
-_EN_WORD_RE = re.compile(r"[A-Za-z]+(?:[-'][A-Za-z]+)?")
-_EXPLANATORY_MEANING_RE = re.compile(
-    r"(由.+组成|组成的|用来|用于|指的是|指|一种|某种|过程|现象|领域|状态)",
-    re.I,
-)
-_ROOT_SEGMENT_RE = re.compile(r"^([^+（）()]{1,40})（[^（）]{1,20}）$")
-_ROOT_BANNED_EN_RE = re.compile(
-    r"\b(past\s*participle|participle|suffix|prefix|form|tense|with\s*-?ed)\b",
-    re.I,
-)
-_ROOT_PLACEHOLDERS = {"-", "无"}
-_ROOT_TOKEN_CLEAN_RE = re.compile(r"[^a-z0-9]+", re.I)
-_PHRASE_EDGE_CHARS = "A-Za-z0-9'-"
-_CLOZE_BLANK_RE = re.compile(r"_{2,}|\[[^\]]*blank[^\]]*\]|\bblank\b", re.I)
-_CHINESE_POS_PREFIX_RE = re.compile(r"^[a-z]{1,12}\.\s*", re.I)
-REQUIRED_KEYS = (
+MOJIBAKE_MARKERS = ("Ã", "Â", "Ð", "Ñ")
+EN_WORD_RE = re.compile(r"[A-Za-z]+(?:[-'][A-Za-z]+)?")
+CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+IMPORTABLE_REQUIRED_KEYS = (
     "word",
     "pronunciation",
-    "part_of_speech",
     "meaning",
     "english_definition",
-    "root",
-    "example",
-    "collocations",
-    "audio_html",
-    "learning_priority",
+    "card_sentence",
+    "sentence_origin",
+    "learning_group",
 )
+IRREGULAR_FORMS = {
+    "be": {"am", "is", "are", "was", "were", "been", "being"},
+    "go": {"goes", "went", "gone", "going"},
+    "take": {"takes", "took", "taken", "taking"},
+    "make": {"makes", "made", "making"},
+    "come": {"comes", "came", "coming"},
+    "see": {"sees", "saw", "seen", "seeing"},
+    "get": {"gets", "got", "gotten", "getting"},
+    "give": {"gives", "gave", "given", "giving"},
+    "write": {"writes", "wrote", "written", "writing"},
+    "read": {"reads", "reading"},
+}
 
 
-def _has_replacement(s: str) -> bool:
-    return REPLACEMENT in s
+def _word_count(text: str) -> int:
+    return len(EN_WORD_RE.findall(text))
 
 
-def _note_pos(note: dict[str, Any]) -> str:
-    for key in ("part_of_speech", "pos", "词性"):
-        value = note.get(key)
-        if value not in (None, ""):
-            return str(value).strip()
-    return ""
-
-
-def _meaning_body(line: str) -> str:
-    return _MEANING_POS_RE.sub("", line.strip()).strip()
-
-
-def _english_word_count(text: str) -> int:
-    return len(_EN_WORD_RE.findall(text))
-
-
-def _normalized_phrase_text(text: str) -> str:
-    return re.sub(r"\s+", " ", text.strip()).casefold()
-
-
-def _normalized_cloze_text(text: str) -> str:
-    return _normalized_phrase_text(_CLOZE_BLANK_RE.sub("____", text))
-
-
-def _phrase_span_pattern(chunk: str) -> re.Pattern[str]:
-    escaped = re.escape(_normalized_phrase_text(chunk)).replace(r"\ ", r"\s+")
-    return re.compile(rf"(?<![{_PHRASE_EDGE_CHARS}]){escaped}(?![{_PHRASE_EDGE_CHARS}])")
-
-
-def _contains_phrase_span(text: str, chunk: str) -> bool:
-    return bool(_phrase_span_pattern(chunk).search(_normalized_phrase_text(text)))
-
-
-def _cloze_matches_chunk_sentence(sentence: str, chunk: str, cloze: str) -> bool:
-    normalized_sentence = _normalized_phrase_text(sentence)
-    pattern = _phrase_span_pattern(chunk)
-    if not pattern.search(normalized_sentence):
-        return False
-    expected = pattern.sub("____", normalized_sentence, count=1)
-    return _normalized_cloze_text(cloze) == expected
-
-
-def _root_token(text: str) -> str:
-    return _ROOT_TOKEN_CLEAN_RE.sub("", text.casefold())
-
-
-def _validate_root_value(root_val: str, word: str, index: int) -> list[str]:
-    errs: list[str] = []
-    rs = root_val.strip()
-    if not rs:
-        errs.append(
-            f"note[{index}] word={word!r}: root must not be empty "
-            "(use '-' or '无' if unsplittable)"
-        )
-        return errs
-    if rs in _ROOT_PLACEHOLDERS:
-        return errs
-
-    if "(" in rs or ")" in rs:
-        errs.append(
-            f"note[{index}] word={word!r}: root must use full-width Chinese parentheses （）, not ()"
-        )
-    if _ROOT_BANNED_EN_RE.search(rs):
-        errs.append(
-            f"note[{index}] word={word!r}: root looks like English grammar explanation; "
-            f"use 形式（中文义） segments (got {root_val!r})"
-        )
-    if _CJK_RE.search(rs) is None:
-        errs.append(
-            f"note[{index}] word={word!r}: root must contain Chinese glosses (got {root_val!r})"
-        )
-
-    parts = [p.strip() for p in rs.split("+")]
-    if any(not p for p in parts):
-        errs.append(
-            f"note[{index}] word={word!r}: root has empty segment around '+' (got {root_val!r})"
-        )
-        return errs
-
-    segment_forms: list[str] = []
-    for p in parts:
-        match = _ROOT_SEGMENT_RE.match(p)
-        if not match:
-            errs.append(
-                f"note[{index}] word={word!r}: invalid root segment {p!r}; expected 形式（中文义）"
+def _contains_target(sentence: str, word: str) -> bool:
+    normalized_word = normalize_word_key(word)
+    normalized_sentence = normalize_word_key(sentence)
+    if " " in normalized_word:
+        return bool(
+            re.search(
+                rf"(?<![a-z]){re.escape(normalized_word)}(?![a-z])",
+                normalized_sentence,
             )
-            continue
-        segment_forms.append(match.group(1).strip())
-    word_token = _root_token(word)
+        )
+    forms = {
+        normalized_word,
+        normalized_word + "s",
+        normalized_word + "es",
+        normalized_word + "ed",
+        normalized_word + "ing",
+        *IRREGULAR_FORMS.get(normalized_word, set()),
+    }
+    if normalized_word.endswith("e"):
+        forms.update({normalized_word + "d", normalized_word[:-1] + "ing"})
+    if normalized_word.endswith("y") and len(normalized_word) > 1:
+        forms.update({normalized_word[:-1] + "ies", normalized_word[:-1] + "ied"})
     if (
-        len(segment_forms) == 1
-        and word_token
-        and _root_token(segment_forms[0]) == word_token
+        len(normalized_word) >= 3
+        and normalized_word[-1] not in "aeiouwxy"
+        and normalized_word[-2] in "aeiou"
+        and normalized_word[-3] not in "aeiou"
     ):
-        errs.append(
-            f"note[{index}] word={word!r}: root repeats the whole word as its only segment "
-            f"({root_val!r}); use '-' or '无' if it cannot be usefully split"
+        forms.update(
+            {
+                normalized_word + normalized_word[-1] + "ed",
+                normalized_word + normalized_word[-1] + "ing",
+            }
         )
-    return errs
-
-
-def _phrase_chunk_text_fields(
-    note: dict[str, Any],
-    keys: tuple[str, ...],
-    index: int,
-    word: str,
-    errs: list[str],
-) -> list[str]:
-    texts: list[str] = []
-    for key in keys:
-        value = note.get(key)
-        if value is None:
-            continue
-        if not isinstance(value, str):
-            errs.append(
-                f"note[{index}] word={word!r}: field {key!r} must be a string "
-                f"(got {type(value).__name__})"
-            )
-            continue
-        text = value.strip()
-        if text:
-            texts.append(text)
-    return texts
-
-
-def _validate_phrase_chunk_fields(note: dict[str, Any], index: int, word: str) -> list[str]:
-    errs: list[str] = []
-    priority = str(note.get("learning_priority") or "").strip()
-    target_chunks = _phrase_chunk_text_fields(note, TARGET_CHUNK_KEYS, index, word, errs)
-    target_chunk_meanings = _phrase_chunk_text_fields(
-        note,
-        TARGET_CHUNK_MEANING_KEYS,
-        index,
-        word,
-        errs,
+    alternatives = "|".join(
+        re.escape(form) for form in sorted(forms, key=len, reverse=True)
     )
-    target_chunk_sentences = _phrase_chunk_text_fields(
-        note,
-        TARGET_CHUNK_SENTENCE_KEYS,
-        index,
-        word,
-        errs,
-    )
-    target_chunk_clozes = _phrase_chunk_text_fields(
-        note,
-        TARGET_CHUNK_CLOZE_KEYS,
-        index,
-        word,
-        errs,
+    return bool(
+        re.search(rf"(?<![a-z])(?:{alternatives})(?![a-z])", normalized_sentence)
     )
 
-    if not target_chunks:
-        errs.append(f"note[{index}] word={word!r}: target_chunk must not be empty")
-    if not target_chunk_meanings:
-        errs.append(f"note[{index}] word={word!r}: target_chunk_meaning must not be empty")
-    if not target_chunk_sentences:
-        errs.append(f"note[{index}] word={word!r}: target_chunk_sentence must not be empty")
-    for target_chunk in target_chunks:
-        if not any(
-            _contains_phrase_span(sentence, target_chunk)
-            for sentence in target_chunk_sentences
-        ):
-            errs.append(
-                f"note[{index}] word={word!r}: target_chunk_sentence must contain "
-                f"target_chunk {target_chunk!r}"
-            )
-    for target_chunk_sentence in target_chunk_sentences:
-        if not any(
-            _contains_phrase_span(target_chunk_sentence, target_chunk)
-            for target_chunk in target_chunks
-        ):
-            errs.append(
-                f"note[{index}] word={word!r}: target_chunk_sentence must contain "
-                "one of the provided target_chunk values"
-            )
-    for target_chunk_meaning in target_chunk_meanings:
-        if _CHINESE_POS_PREFIX_RE.match(target_chunk_meaning) or len(target_chunk_meaning) > 24:
-            errs.append(
-                f"note[{index}] word={word!r}: target_chunk_meaning should be a phrase-level "
-                f"Chinese anchor, not a word-level dictionary gloss (got {target_chunk_meaning!r})"
-            )
 
-    if priority == "focus":
-        if not target_chunk_clozes:
-            errs.append(f"note[{index}] word={word!r}: focus notes need target_chunk_cloze")
-        for target_chunk_cloze in target_chunk_clozes:
-            if not _CLOZE_BLANK_RE.search(target_chunk_cloze):
-                errs.append(
-                    f"note[{index}] word={word!r}: target_chunk_cloze must contain a blank "
-                    "such as ____"
-                )
-            elif _english_word_count(_CLOZE_BLANK_RE.sub(" ", target_chunk_cloze)) < 4:
-                errs.append(
-                    f"note[{index}] word={word!r}: target_chunk_cloze must be a natural "
-                    f"sentence, got {target_chunk_cloze!r}"
-                )
-            elif not any(
-                _cloze_matches_chunk_sentence(sentence, target_chunk, target_chunk_cloze)
-                for sentence in target_chunk_sentences
-                for target_chunk in target_chunks
-            ):
-                errs.append(
-                    f"note[{index}] word={word!r}: target_chunk_cloze must be derived "
-                    "from target_chunk_sentence by blanking target_chunk"
-                )
-    elif priority in {"passive", "ignore"} and target_chunk_clozes:
-        errs.append(
-            f"note[{index}] word={word!r}: {priority} notes must leave target_chunk_cloze empty"
+def _text(note: dict[str, Any], key: str) -> str:
+    value = note.get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _is_complete_importable_note(note: dict[str, Any]) -> bool:
+    return all(note.get(key) not in (None, "", []) for key in IMPORTABLE_REQUIRED_KEYS)
+
+
+def _validate_note(note: dict[str, Any], index: int) -> list[str]:
+    errors: list[str] = []
+    word = _text(note, "word")
+    group_value = note.get("learning_group")
+    if (
+        not isinstance(group_value, str)
+        or group_value.strip() not in LEARNING_GROUP_VALUES
+    ):
+        errors.append(
+            f"note[{index}] word={word!r}: learning_group must be one of "
+            f"{', '.join(LEARNING_GROUP_VALUES)}"
         )
+        return errors
+    group = group_value.strip()
 
-    return errs
+    if group == "reject":
+        if _is_complete_importable_note(note):
+            errors.append(
+                f"note[{index}] word={word!r}: reject is only for invalid fragments or garbage"
+            )
+        return errors
 
-
-def _check_note(
-    note: dict[str, Any],
-    index: int,
-    *,
-    require_ipa_slashes: bool,
-    require_pronunciation: bool,
-    min_collocations: int,
-    max_meaning_chars: int,
-    min_english_definition_words: int,
-    max_english_definition_words: int,
-    allow_weak_english_definitions: bool,
-    allow_long_meanings: bool,
-    allow_single_letter_words: bool,
-) -> list[str]:
-    errs: list[str] = []
-    for key in REQUIRED_KEYS:
+    for key in IMPORTABLE_REQUIRED_KEYS:
         if key not in note:
-            errs.append(f"note[{index}] missing key {key!r} (word={note.get('word')!r})")
-
-    w = str(note.get("word") or "").strip()
-    if not w:
-        errs.append(f"note[{index}]: word must not be empty")
-    if (
-        w
-        and len(w) == 1
-        and w.lower() not in {"a", "i"}
-        and not allow_single_letter_words
+            errors.append(f"note[{index}] word={word!r}: missing key {key!r}")
+    if not any(
+        _text(note, key) for key in ("add_time_utc", "add_time_local", "encountered_at")
     ):
-        errs.append(
-            f"note[{index}] word={w!r}: suspicious single-letter word; "
-            "check whether it is an accidental fragment (use --allow-single-letter-words to override)"
-        )
-    pron = note.get("pronunciation")
-    if pron is None:
-        errs.append(f"note[{index}] word={w!r}: pronunciation must be present (use \"\" if empty)")
-        return errs
-    if not isinstance(pron, str):
-        errs.append(f"note[{index}] word={w!r}: pronunciation must be a string")
-        return errs
+        errors.append(f"note[{index}] word={word!r}: encounter time is required")
 
-    if _has_replacement(pron):
-        errs.append(
-            f"note[{index}] word={w!r}: pronunciation contains U+FFFD (replacement character)—"
-            f"encoding was corrupted; rewrite IPA via UTF-8 file write or \\u escapes, "
-            f"not shell heredocs."
+    if not word:
+        errors.append(f"note[{index}]: word must not be empty")
+    elif len(word) == 1 and word.casefold() not in {"a", "i"}:
+        errors.append(
+            f"note[{index}] word={word!r}: invalid fragment should use learning_group reject"
         )
 
-    if not pron.strip() and require_pronunciation:
-        errs.append(
-            f"note[{index}] word={w!r}: pronunciation must not be empty; "
-            "write complete AmE IPA like /spraɪts/"
+    for key in (
+        "word",
+        "pronunciation",
+        "english_definition",
+        "word_family",
+        "source_context",
+        "card_sentence",
+        "sentence_origin",
+        "source_chunk",
+        "source_chunk_meaning",
+        "audio_html",
+    ):
+        if key in note and not isinstance(note[key], str):
+            errors.append(
+                f"note[{index}] word={word!r}: field {key!r} must be a string"
+            )
+        value = note.get(key)
+        if isinstance(value, str):
+            if REPLACEMENT in value:
+                errors.append(
+                    f"note[{index}] word={word!r}: field {key!r} contains U+FFFD"
+                )
+            if any(marker in value for marker in MOJIBAKE_MARKERS):
+                errors.append(
+                    f"note[{index}] word={word!r}: field {key!r} contains mojibake"
+                )
+
+    pronunciation = _text(note, "pronunciation")
+    if not pronunciation:
+        errors.append(f"note[{index}] word={word!r}: pronunciation must not be empty")
+    elif not (pronunciation.startswith("/") and pronunciation.endswith("/")):
+        errors.append(
+            f"note[{index}] word={word!r}: pronunciation must use /.../ IPA notation"
         )
 
-    if pron.strip():
-        if require_ipa_slashes and not (pron.startswith("/") and pron.endswith("/")):
-            errs.append(
-                f"note[{index}] word={w!r}: non-empty pronunciation should be one AmE IPA "
-                f"wrapped in /.../ (got {pron!r})"
-            )
-        if any(m in pron for m in _MOJIBAKE_MARKERS):
-            errs.append(
-                f"note[{index}] word={w!r}: pronunciation contains mojibake markers "
-                f"(e.g. Ã/Â/Ð/Ñ), likely encoding corruption: {pron!r}"
-            )
-
-    for key in ("word", "english_definition", "root", "example", "audio_html", "source_context"):
-        val = note.get(key, "")
-        if val is not None and not isinstance(val, str):
-            errs.append(
-                f"note[{index}] word={w!r}: field {key!r} must be a string "
-                f"(got {type(val).__name__})"
-            )
-        if isinstance(val, str) and _has_replacement(val):
-            errs.append(f"note[{index}] word={w!r}: field {key!r} contains U+FFFD")
-        if isinstance(val, str) and key in (
-            "word",
-            "english_definition",
-            "root",
-            "example",
-            "audio_html",
-            "source_context",
-        ):
-            if any(m in val for m in _MOJIBAKE_MARKERS):
-                errs.append(
-                    f"note[{index}] word={w!r}: field {key!r} contains mojibake markers "
-                    f"(e.g. Ã/Â/Ð/Ñ): {val!r}"
-                )
-        if key == "english_definition" and isinstance(val, str) and not val.strip():
-            errs.append(f"note[{index}] word={w!r}: english_definition must not be empty")
-        if (
-            key == "english_definition"
-            and isinstance(val, str)
-            and val.strip()
-            and not allow_weak_english_definitions
-        ):
-            if _CJK_RE.search(val):
-                errs.append(
-                    f"note[{index}] word={w!r}: english_definition must be plain English, "
-                    f"not Chinese or mixed-language text (got {val!r})"
-                )
-            wc = _english_word_count(val)
-            if wc < min_english_definition_words:
-                errs.append(
-                    f"note[{index}] word={w!r}: english_definition is too terse for an "
-                    f"explanatory learner definition ({wc} words < {min_english_definition_words}): {val!r}"
-                )
-            if max_english_definition_words > 0 and wc > max_english_definition_words:
-                errs.append(
-                    f"note[{index}] word={w!r}: english_definition is too long for a concise "
-                    f"learner definition ({wc} words > {max_english_definition_words}): {val!r}"
-                )
     meanings = note.get("meaning")
-    if meanings is not None:
-        if not isinstance(meanings, list):
-            errs.append(
-                f"note[{index}] word={w!r}: meaning must be an array of strings "
-                f"(got {type(meanings).__name__})"
-            )
-        else:
-            if not any(isinstance(m, str) and m.strip() for m in meanings):
-                errs.append(f"note[{index}] word={w!r}: meaning must not be empty")
-            for j, m in enumerate(meanings):
-                if not isinstance(m, str):
-                    errs.append(
-                        f"note[{index}] word={w!r}: meaning[{j}] must be string "
-                        f"(got {type(m).__name__})"
-                    )
-                    continue
-                if _has_replacement(m):
-                    errs.append(f"note[{index}] word={w!r}: meaning[{j}] contains U+FFFD")
-                if any(mark in m for mark in _MOJIBAKE_MARKERS):
-                    errs.append(
-                        f"note[{index}] word={w!r}: meaning[{j}] contains mojibake markers: {m!r}"
-                    )
-                if m.strip() and not meaning_line_has_pos_prefix(m):
-                    errs.append(
-                        f"note[{index}] word={w!r}: meaning[{j}] must start with a POS marker "
-                        f"like 'n.', 'vt.', 'vi.', 'adj.' or 'adv.' (got {m!r})"
-                    )
-                body = _meaning_body(m)
-                if body and not allow_long_meanings:
-                    if max_meaning_chars > 0 and len(body) > max_meaning_chars:
-                        errs.append(
-                            f"note[{index}] word={w!r}: meaning[{j}] is too long for a concise "
-                            f"Chinese gloss ({len(body)} chars > {max_meaning_chars}): {m!r}"
-                        )
-                    if len(body) > 8 and _EXPLANATORY_MEANING_RE.search(body):
-                        errs.append(
-                            f"note[{index}] word={w!r}: meaning[{j}] looks like an explanatory "
-                            "definition; use a short dictionary-style Chinese gloss and move "
-                            f"the explanation to english_definition (got {m!r})"
-                        )
-
-    pos = _note_pos(note)
-    if not pos:
-        errs.append(
-            f"note[{index}] word={w!r}: missing non-empty 'part_of_speech' "
-            "(use values like 'n.', 'vt.', 'vi.', 'adj.', 'adv.')"
+    if not isinstance(meanings, list) or not meanings:
+        errors.append(f"note[{index}] word={word!r}: meaning must be a non-empty array")
+    elif any(not isinstance(item, str) or not item.strip() for item in meanings):
+        errors.append(
+            f"note[{index}] word={word!r}: meaning entries must be non-empty strings"
         )
-    elif not meaning_line_has_pos_prefix(pos):
-        errs.append(
-            f"note[{index}] word={w!r}: part_of_speech must look like a POS marker "
-            f"(got {pos!r})"
-        )
-
-    priority = note.get("learning_priority")
-    if not isinstance(priority, str):
-        errs.append(
-            f"note[{index}] word={w!r}: learning_priority must be a string "
-            f"with one of {', '.join(LEARNING_PRIORITY_VALUES)}"
-        )
-    elif priority.strip() not in LEARNING_PRIORITY_VALUES:
-        errs.append(
-            f"note[{index}] word={w!r}: learning_priority must be one of "
-            f"{', '.join(LEARNING_PRIORITY_VALUES)} (got {priority!r})"
-        )
-
-
-    colls = note.get("collocations")
-    if colls is None:
-        errs.append(f"note[{index}] word={w!r}: collocations must be an array of strings")
     else:
-        if not isinstance(colls, list):
-            errs.append(
-                f"note[{index}] word={w!r}: collocations must be an array of strings "
-                f"(got {type(colls).__name__})"
-            )
-        else:
-            non_empty_colls = 0
-            for j, c in enumerate(colls):
-                if not isinstance(c, str):
-                    errs.append(
-                        f"note[{index}] word={w!r}: collocations[{j}] must be string "
-                        f"(got {type(c).__name__})"
-                    )
-                    continue
-                if not c.strip():
-                    errs.append(f"note[{index}] word={w!r}: collocations[{j}] must not be empty")
-                else:
-                    non_empty_colls += 1
-                if _has_replacement(c):
-                    errs.append(f"note[{index}] word={w!r}: collocations[{j}] contains U+FFFD")
-                if any(mark in c for mark in _MOJIBAKE_MARKERS):
-                    errs.append(
-                        f"note[{index}] word={w!r}: collocations[{j}] contains mojibake markers: {c!r}"
-                    )
-            if non_empty_colls < min_collocations:
-                errs.append(
-                    f"note[{index}] word={w!r}: collocations needs at least {min_collocations} "
-                    f"non-empty common collocation(s) (got {non_empty_colls})"
+        for item in meanings:
+            if not meaning_line_has_pos_prefix(item):
+                errors.append(
+                    f"note[{index}] word={word!r}: meaning must start with a POS marker"
                 )
 
-    root_val = note.get("root", "")
-    if isinstance(root_val, str):
-        errs.extend(_validate_root_value(root_val, w, index))
+    definition = _text(note, "english_definition")
+    if not definition:
+        errors.append(
+            f"note[{index}] word={word!r}: english_definition must not be empty"
+        )
+    elif CJK_RE.search(definition):
+        errors.append(
+            f"note[{index}] word={word!r}: english_definition must be English"
+        )
+    elif not 4 <= _word_count(definition) <= 32:
+        errors.append(
+            f"note[{index}] word={word!r}: english_definition should contain 4-32 words"
+        )
 
-    errs.extend(_validate_phrase_chunk_fields(note, index, w))
+    word_family = _text(note, "word_family")
+    if word_family in {"-", "无"}:
+        errors.append(
+            f"note[{index}] word={word!r}: omit word_family instead of using a placeholder"
+        )
 
-    return errs
+    sentence = _text(note, "card_sentence")
+    origin = _text(note, "sentence_origin")
+    raw_source = _text(note, "source_context")
+    if not sentence:
+        errors.append(f"note[{index}] word={word!r}: card_sentence must not be empty")
+    elif not _contains_target(sentence, word):
+        errors.append(
+            f"note[{index}] word={word!r}: card_sentence must contain the target word or a valid inflection"
+        )
+    if origin not in SENTENCE_ORIGIN_VALUES:
+        errors.append(
+            f"note[{index}] word={word!r}: sentence_origin must be one of "
+            f"{', '.join(SENTENCE_ORIGIN_VALUES)}"
+        )
+    elif origin in {"source", "adapted"} and not raw_source:
+        errors.append(
+            f"note[{index}] word={word!r}: {origin} sentence needs source_context"
+        )
+    elif origin == "source" and normalize_word_key(sentence) != normalize_word_key(
+        raw_source
+    ):
+        errors.append(
+            f"note[{index}] word={word!r}: use adapted when card_sentence rewrites source_context"
+        )
+    elif origin == "generated":
+        count = _word_count(sentence)
+        if not 8 <= count <= 16:
+            errors.append(
+                f"note[{index}] word={word!r}: generated card_sentence should contain 8-16 words"
+            )
+
+    chunk = _text(note, "source_chunk")
+    chunk_meaning = _text(note, "source_chunk_meaning")
+    if bool(chunk) != bool(chunk_meaning):
+        errors.append(
+            f"note[{index}] word={word!r}: source_chunk and source_chunk_meaning must appear together"
+        )
+    if chunk and normalize_word_key(chunk) not in normalize_word_key(sentence):
+        errors.append(
+            f"note[{index}] word={word!r}: source_chunk must occur in card_sentence"
+        )
+    if (
+        chunk
+        and origin in {"source", "adapted"}
+        and normalize_word_key(chunk) not in normalize_word_key(raw_source)
+    ):
+        errors.append(
+            f"note[{index}] word={word!r}: source_chunk must be traceable to source_context"
+        )
+    if origin == "generated" and chunk:
+        errors.append(
+            f"note[{index}] word={word!r}: generated sentences cannot claim a source_chunk"
+        )
+    return errors
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("json_path", type=Path, help="Import JSON with top-level 'notes' array")
-    parser.add_argument(
-        "--no-require-ipa-slashes",
-        action="store_true",
-        help="Do not require /.../ around non-empty pronunciation (not recommended).",
-    )
-    parser.add_argument(
-        "--allow-empty-pronunciation",
-        action="store_true",
-        help="Allow empty pronunciation values (debug only; imports should keep IPA complete).",
-    )
-    parser.add_argument(
-        "--allow-empty-example",
-        action="store_true",
-        help="Deprecated compatibility flag; example is source-only and may be empty.",
-    )
-    parser.add_argument(
-        "--min-collocations",
-        type=int,
-        default=2,
-        help="Minimum non-empty collocations per note. Default: 2.",
-    )
-    parser.add_argument(
-        "--max-meaning-chars",
-        type=int,
-        default=18,
-        help="Maximum characters after the POS marker for each Chinese meaning line. Default: 18.",
-    )
-    parser.add_argument(
-        "--min-english-definition-words",
-        type=int,
-        default=5,
-        help="Minimum words in english_definition. Default: 5.",
-    )
-    parser.add_argument(
-        "--max-english-definition-words",
-        type=int,
-        default=32,
-        help="Maximum words in english_definition. Default: 32.",
-    )
-    parser.add_argument(
-        "--allow-weak-english-definitions",
-        action="store_true",
-        help="Allow terse, long, or mixed-language english_definition values (not recommended).",
-    )
-    parser.add_argument(
-        "--allow-long-meanings",
-        action="store_true",
-        help="Allow long or explanatory Chinese meaning lines (not recommended).",
-    )
-    parser.add_argument(
-        "--allow-single-letter-words",
-        action="store_true",
-        help="Allow single-letter words other than a/I (normally accidental fragments).",
-    )
-    parser.add_argument(
-        "--allow-all-roots-dash",
-        action="store_true",
-        help="Allow every note in the batch to use root '-'/'无' (normally means roots were not generated).",
-    )
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("json_path", type=Path)
     args = parser.parse_args()
-
-    path = args.json_path
-    if not path.exists():
-        print(f"error: file not found: {path}", file=sys.stderr)
+    if not args.json_path.is_file():
+        print(f"error: file not found: {args.json_path}", file=sys.stderr)
         return 2
-
     try:
-        raw = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        print(f"error: {path} is not valid UTF-8: {exc}", file=sys.stderr)
-        return 2
-
-    if _has_replacement(raw):
-        print(
-            f"error: {path} contains U+FFFD at file level—re-save as UTF-8 without corrupting IPA.",
-            file=sys.stderr,
-        )
-        return 2
-
-    try:
+        raw = args.json_path.read_text(encoding="utf-8")
         data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        print(f"error: invalid JSON in {path}: {exc}", file=sys.stderr)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        print(f"error: invalid UTF-8 JSON: {exc}", file=sys.stderr)
         return 2
-
-    notes = data.get("notes")
+    if REPLACEMENT in raw:
+        print("error: file contains U+FFFD", file=sys.stderr)
+        return 2
+    notes = data.get("notes") if isinstance(data, dict) else None
     if not isinstance(notes, list):
         print("error: top-level 'notes' must be an array", file=sys.stderr)
         return 2
-
-    require_slashes = not args.no_require_ipa_slashes
-    all_errs: list[str] = []
-    root_values: list[str] = []
-    for i, note in enumerate(notes):
+    errors: list[str] = []
+    for index, note in enumerate(notes):
         if not isinstance(note, dict):
-            all_errs.append(f"note[{i}] must be an object, got {type(note).__name__}")
+            errors.append(f"note[{index}] must be an object")
             continue
-        root_values.append(str(note.get("root") or "").strip())
-        all_errs.extend(
-            _check_note(
-                note,
-                i,
-                require_ipa_slashes=require_slashes,
-                require_pronunciation=not args.allow_empty_pronunciation,
-                min_collocations=max(0, args.min_collocations),
-                max_meaning_chars=max(0, args.max_meaning_chars),
-                min_english_definition_words=max(0, args.min_english_definition_words),
-                max_english_definition_words=max(0, args.max_english_definition_words),
-                allow_weak_english_definitions=args.allow_weak_english_definitions,
-                allow_long_meanings=args.allow_long_meanings,
-                allow_single_letter_words=args.allow_single_letter_words,
-            )
-        )
-
-    if (
-        root_values
-        and all(root in _ROOT_PLACEHOLDERS for root in root_values)
-        and not args.allow_all_roots_dash
-    ):
-        all_errs.append(
-            "all notes have placeholder root '-'/'无'；regenerate root/affix breakdowns "
-            "and use placeholders only when a word is genuinely unsplittable"
-        )
-
-    if all_errs:
-        print(f"validation failed ({len(all_errs)} issue(s)):", file=sys.stderr)
-        for line in all_errs:
-            print(f"  {line}", file=sys.stderr)
+        errors.extend(_validate_note(note, index))
+    if errors:
+        print(f"validation failed ({len(errors)} issue(s)):", file=sys.stderr)
+        for error in errors:
+            print(f"  {error}", file=sys.stderr)
         return 1
-
-    print(f"OK: {len(notes)} notes in {path}")
+    print(f"OK: {len(notes)} notes in {args.json_path}")
     return 0
 
 

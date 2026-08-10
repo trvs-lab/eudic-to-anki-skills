@@ -1,46 +1,25 @@
 # Import Module
 
-负责 AnkiConnect 导入、deck/model 选择、可选 upsert 刷新策略。
+通过 AnkiConnect 导入单卡 Context Anchor 笔记。
 
-## 前置
+## 受管分组
 
-- Anki Desktop 已启动
-- AnkiConnect 可访问（`http://127.0.0.1:8765`）
+- `words::learn`
+- `words::defer`
+- `words::skip`
 
-## 执行约束
+`reject` 不进入 Anki。已有卡片当前所在的受管 deck 优先于本次分类：`learn` 保持不变，`skip` 保持不变，`defer` 在出现新的独立遇见记录时转入 `learn`。
 
-- 将文档中的 `~/Documents/eudic-to-anki-temp/...` 先展开成真实绝对路径，例如 `/Users/alice/Documents/eudic-to-anki-temp/...`。
-- 规则敏感命令必须直连执行；不要再包 `/bin/zsh -lc ...`、`zsh -lc ...`、`bash -lc ...`。
-- 不要把 `mkdir`、`cd`、`export` 等准备动作和导入命令用 `&&`、`||`、`;`、管道或子 shell 串在一起；拆成两条命令执行。
+同一规范词形只保留一条 note。新的独立遇见会更新字段、累加次数、保存最近 2–3 条真实历史语境，并对单张卡执行 `forgetCards`。相同 encounter ID 的重复导入不更新、不移动、不重置。
 
 ## 命令
 
 - 连通性：`python3 scripts/ankiconnect_import.py --ping`
 - 预演：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run`
-- 基础导入：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/import.json --deck words --create-deck`
-- 导入成功后默认会调用 AnkiConnect `sync`（与手动点同步一致）；若需跳过，加 `--no-sync`。
-- 刷新已存在卡片：在导入命令加 `--dia-upsert`
-- `--deck words` 是 base deck。`TRVS-Lab` 会按卡片类型分流：
-  - `words::chunk-anchor::focus`
-  - `words::chunk-anchor::passive`
-  - `words::chunk-anchor::ignore`
-  - `words::chunk-recall::focus`
-- 这是 fresh-start breaking upgrade；旧 `TRVS-Lab` note 不保证显示正确。升级前清空旧 note 或相关 deck。
-- `ignore` 只生成 `words::chunk-anchor::ignore` 锚点卡，不会默认挂起、跳过或排除；复习方式交给用户在 Anki 里决定。
-- Anchor 卡和 recall 卡是分开的模板与 deck，用于学习短语块，而不是孤立单词。Anchor 正面显示目标短语块和 `短语块例句`；Anchor 背面先轻量显示短语块意思，只在 `例句` 非空时显示来源例句，然后用紧凑词头合并显示 `单词`、`音标` 和词级中文 `meaning`。
-- 不生成短语块专用音频；两类卡片都使用主单词音频。Recall 正面先显示挖空句，再显示短语块中文意思；Recall 背面左对齐显示目标短语块，只在 `例句` 非空时显示来源例句，并用同一套紧凑词头显示 `单词`、`音标`、词级中文 `meaning` 和 1-2 条搭配。
-- `TRVS-Lab` 导入会确保模型包含 `学习标记` 字段，并把 `learning_priority` 写入纯符号字段和稳定 tag：`priority::focus/passive/ignore`；卡片仅在背面以轻量提示显示该符号，不会再添加 `english`、`vocab`、`eudic`。
-- 音频为必填：真实导入必须带 `--require-audio`，并使用 `--audio-provider command` 或 `--audio-provider existing` 生成/保留 `[sound:...]`。
-- 导入后字段校验：真实导入加 `--verify-required-fields`，会回读 Anki note 并检查 `音标/释义/英英/词根/常用搭配/短语块例句/发音` 等必填字段；`例句` 是来源例句，可为空。
-- `--dia-upsert` 默认会在 base deck 和短语块卡片 deck 里按 `单词` 查旧 note，更新字段/标签，并按生成卡片类型路由到 chunk anchor / chunk recall deck；更新时默认重置为新卡。只有用户明确要求「不要重置学习进度」时，才加 `--preserve-progress-on-update` 保留学习进度。
-- 执行前先 dry-run，执行后抽查 Anki 实际字段。
-- 其中 `<ABS_TEMP_DIR>` 代表展开后的真实绝对目录，例如 `/Users/alice/Documents/eudic-to-anki-temp`
+- 真实导入：见 `SKILL.md` 中带 Edge-TTS 的完整命令。
 
-## 输出
+预演输出分类、新建、更新、`defer → learn`、幂等和重置数量。真实导入成功后默认同步；仅在明确需要时使用 `--no-sync`。
 
-- 导入/更新/跳过统计
-- deck / model 使用情况
+## 迁移
 
-## 参考
-
-- `references/anki.md`
+检测到旧 `Chunk Anchor` / `Chunk Recall` 双模板时必须停止。先备份 Anki，删除旧 `TRVS-Lab` notes 和 note type，再重新导入。不得在原模型上直接删除召回模板。

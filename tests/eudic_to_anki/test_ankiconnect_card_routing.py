@@ -12,8 +12,7 @@ SCRIPTS = ROOT / "skills" / "eudic-to-anki" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 spec = importlib.util.spec_from_file_location(
-    "ankiconnect_import",
-    SCRIPTS / "ankiconnect_import.py",
+    "ankiconnect_import", SCRIPTS / "ankiconnect_import.py"
 )
 assert spec is not None and spec.loader is not None
 ankiconnect_import = importlib.util.module_from_spec(spec)
@@ -21,216 +20,135 @@ spec.loader.exec_module(ankiconnect_import)
 
 
 class FakeClient:
-    def __init__(self) -> None:
+    def __init__(self, *, group: str = "defer") -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
-        self.notes_info_override: list[dict[str, Any]] | None = None
-        self.cards_info_override: list[dict[str, Any]] | None = None
-        self.cards_info_by_request: dict[tuple[int, ...], list[dict[str, Any]]] = {}
-        self.cards = {
-            101: {"cardId": 101, "note": 1, "ord": 0, "deckName": "words"},
-            102: {"cardId": 102, "note": 1, "ord": 1, "deckName": "words"},
-            201: {"cardId": 201, "note": 2, "ord": 0, "deckName": "words"},
-        }
+        self.group = group
 
     def invoke(self, action: str, **params: Any) -> Any:
         self.calls.append((action, params))
+        if action == "findNotes":
+            return [1]
         if action == "notesInfo":
-            if self.notes_info_override is not None:
-                return self.notes_info_override
-            notes = params["notes"]
-            result = []
-            for note_id in notes:
-                if note_id == 1:
-                    result.append(
-                        {
-                            "noteId": 1,
-                            "fields": {
-                                "单词": {"value": "inflict"},
-                                "学习标记": {"value": "★"},
-                            },
-                            "cards": [101, 102],
-                        }
-                    )
-                if note_id == 2:
-                    result.append(
-                        {
-                            "noteId": 2,
-                            "fields": {
-                                "单词": {"value": "sphinx"},
-                                "学习标记": {"value": "◇"},
-                            },
-                            "cards": [201],
-                        }
-                    )
-            return result
+            return [
+                {
+                    "noteId": 1,
+                    "fields": {
+                        "单词": {"value": "inflict"},
+                        "规范词形": {"value": "inflict"},
+                        "卡片例句": {"value": "The storm inflicted damage."},
+                        "例句来源": {"value": "source"},
+                        "原始来源": {"value": "The storm inflicted damage."},
+                        "遇见次数": {"value": "1"},
+                        "最近遇见": {"value": "2026-08-09T01:00:00Z"},
+                        "遇见记录": {
+                            "value": (
+                                '[{"id":"old","at":"2026-08-09T01:00:00Z",'
+                                '"raw_source":"The storm inflicted damage.",'
+                                '"card_sentence":"The storm inflicted damage.",'
+                                '"origin":"source"}]'
+                            )
+                        },
+                        "学习分组": {"value": self.group},
+                        "发音": {"value": "[sound:inflict.mp3]"},
+                    },
+                    "tags": [],
+                    "cards": [101],
+                }
+            ]
         if action == "cardsInfo":
-            request_key = tuple(params["cards"])
-            if request_key in self.cards_info_by_request:
-                return self.cards_info_by_request[request_key]
-            if self.cards_info_override is not None:
-                return self.cards_info_override
-            return [self.cards[card_id] for card_id in params["cards"]]
-        if action == "changeDeck":
+            return [
+                {
+                    "cardId": 101,
+                    "note": 1,
+                    "ord": 0,
+                    "deckName": f"words::{self.group}",
+                }
+            ]
+        if action in {"updateNote", "forgetCards", "changeDeck"}:
             return None
-        return None
+        raise AssertionError(f"unexpected action {action}")
 
 
-class CardRoutingTests(unittest.TestCase):
-    def test_planned_chunk_deck_counts_are_card_counts(self) -> None:
-        payloads = [
-            {"fields": {"学习标记": "★"}},
-            {"fields": {"学习标记": "◇"}},
-            {"fields": {"学习标记": "×"}},
-        ]
+def note(
+    *, timestamp: str, raw: str = "The flood inflicted more damage."
+) -> dict[str, Any]:
+    return {
+        "word": "Inflict",
+        "pronunciation": "/ɪnˈflɪkt/",
+        "meaning": ["vt. 使遭受；造成"],
+        "english_definition": "to make someone suffer something unpleasant",
+        "word_family": "in-（向内）+ flict（打击）",
+        "source_context": raw,
+        "card_sentence": raw or "Criticism can inflict lasting harm on a child.",
+        "sentence_origin": "source" if raw else "generated",
+        "learning_group": "defer",
+        "category_id": "book-1",
+        "add_time_utc": timestamp,
+        "audio_html": "[sound:inflict.mp3]",
+    }
 
+
+class ContextAnchorImportTests(unittest.TestCase):
+    def test_managed_deck_names_are_learn_defer_skip(self) -> None:
         self.assertEqual(
-            ankiconnect_import.planned_chunk_deck_counts_text(payloads, "words"),
-            (
-                "words::chunk-anchor::focus: 1, "
-                "words::chunk-anchor::ignore: 1, "
-                "words::chunk-anchor::passive: 1, "
-                "words::chunk-recall::focus: 1"
-            ),
+            ankiconnect_import.managed_decks("words"),
+            ["words::learn", "words::defer", "words::skip"],
         )
 
-    def test_chunk_deck_names_are_action_first(self) -> None:
-        self.assertEqual(
-            ankiconnect_import.chunk_anchor_deck_name("words", "focus"),
-            "words::chunk-anchor::focus",
+    def test_new_encounter_promotes_defer_and_resets_one_card(self) -> None:
+        client = FakeClient(group="defer")
+        summary = ankiconnect_import.upsert_context_anchor_notes(
+            client,
+            [note(timestamp="2026-08-10T01:00:00Z")],
+            base_deck="words",
+            model="TRVS-Lab",
         )
-        self.assertEqual(
-            ankiconnect_import.chunk_recall_deck_name("words"),
-            "words::chunk-recall::focus",
-        )
-
-    def test_route_focus_note_cards_to_anchor_and_recall_decks(self) -> None:
-        client = FakeClient()
-        ankiconnect_import.route_trvs_chunk_cards(client, [1], base_deck="words")
-        change_calls = [call for call in client.calls if call[0] == "changeDeck"]
+        actions = [action for action, _ in client.calls]
+        self.assertEqual(summary["updated"], 1)
+        self.assertEqual(summary["defer_to_learn"], 1)
+        self.assertIn("updateNote", actions)
+        self.assertIn(("forgetCards", {"cards": [101]}), client.calls)
         self.assertIn(
-            ("changeDeck", {"cards": [101], "deck": "words::chunk-anchor::focus"}),
-            change_calls,
-        )
-        self.assertIn(
-            ("changeDeck", {"cards": [102], "deck": "words::chunk-recall::focus"}),
-            change_calls,
+            ("changeDeck", {"cards": [101], "deck": "words::learn"}),
+            client.calls,
         )
 
-    def test_route_passive_note_only_to_anchor_deck(self) -> None:
-        client = FakeClient()
-        ankiconnect_import.route_trvs_chunk_cards(client, [2], base_deck="words")
-        change_calls = [call for call in client.calls if call[0] == "changeDeck"]
-        self.assertEqual(
-            change_calls,
-            [("changeDeck", {"cards": [201], "deck": "words::chunk-anchor::passive"})],
+    def test_skip_deck_is_authoritative_on_new_encounter(self) -> None:
+        client = FakeClient(group="skip")
+        ankiconnect_import.upsert_context_anchor_notes(
+            client,
+            [note(timestamp="2026-08-10T01:00:00Z")],
+            base_deck="words",
+            model="TRVS-Lab",
         )
-
-    def test_route_raises_without_changing_decks_when_notes_info_omits_note(self) -> None:
-        client = FakeClient()
-        client.notes_info_override = []
-
-        with self.assertRaises(ankiconnect_import.AnkiImportError):
-            ankiconnect_import.route_trvs_chunk_cards(client, [1], base_deck="words")
-
-        change_calls = [call for call in client.calls if call[0] == "changeDeck"]
-        self.assertEqual(change_calls, [])
-
-    def test_route_raises_without_changing_decks_when_notes_info_has_unexpected_note(
-        self,
-    ) -> None:
-        client = FakeClient()
-        client.notes_info_override = [
-            {
-                "noteId": 1,
-                "fields": {
-                    "单词": {"value": "inflict"},
-                    "学习标记": {"value": "★"},
-                },
-                "cards": [101, 102],
-            },
-            {
-                "noteId": 3,
-                "fields": {
-                    "单词": {"value": "stray"},
-                    "学习标记": {"value": "◇"},
-                },
-                "cards": [301],
-            },
+        change_calls = [
+            params for action, params in client.calls if action == "changeDeck"
         ]
-
-        with self.assertRaises(ankiconnect_import.AnkiImportError):
-            ankiconnect_import.route_trvs_chunk_cards(client, [1], base_deck="words")
-
-        change_calls = [call for call in client.calls if call[0] == "changeDeck"]
         self.assertEqual(change_calls, [])
+        update = next(
+            params for action, params in client.calls if action == "updateNote"
+        )
+        self.assertEqual(update["note"]["fields"]["学习分组"], "skip")
 
-    def test_route_raises_without_changing_decks_when_cards_info_omits_card(self) -> None:
-        client = FakeClient()
-        client.cards_info_override = [client.cards[101]]
-
-        with self.assertRaises(ankiconnect_import.AnkiImportError):
-            ankiconnect_import.route_trvs_chunk_cards(client, [1], base_deck="words")
-
-        change_calls = [call for call in client.calls if call[0] == "changeDeck"]
-        self.assertEqual(change_calls, [])
-
-    def test_route_raises_without_changing_decks_when_cards_info_has_unexpected_card(
-        self,
-    ) -> None:
-        client = FakeClient()
-        client.cards_info_override = [
-            client.cards[101],
-            client.cards[102],
-            {"cardId": 999, "note": 1, "ord": 0, "deckName": "words"},
-        ]
-
-        with self.assertRaises(ankiconnect_import.AnkiImportError):
-            ankiconnect_import.route_trvs_chunk_cards(client, [1], base_deck="words")
-
-        change_calls = [call for call in client.calls if call[0] == "changeDeck"]
-        self.assertEqual(change_calls, [])
-
-    def test_route_raises_without_changing_decks_when_cards_info_duplicates_card(
-        self,
-    ) -> None:
-        client = FakeClient()
-        client.cards_info_override = [
-            client.cards[101],
-            client.cards[101],
-            client.cards[102],
-        ]
-
-        with self.assertRaises(ankiconnect_import.AnkiImportError):
-            ankiconnect_import.route_trvs_chunk_cards(client, [1], base_deck="words")
-
-        change_calls = [call for call in client.calls if call[0] == "changeDeck"]
-        self.assertEqual(change_calls, [])
-
-    def test_route_does_not_change_any_decks_when_later_note_has_bad_cards_info(
-        self,
-    ) -> None:
-        client = FakeClient()
-        client.cards_info_by_request[(101, 102)] = [
-            client.cards[101],
-            client.cards[102],
-        ]
-        client.cards_info_by_request[(201,)] = []
-
-        with self.assertRaises(ankiconnect_import.AnkiImportError):
-            ankiconnect_import.route_trvs_chunk_cards(client, [1, 2], base_deck="words")
-
-        change_calls = [call for call in client.calls if call[0] == "changeDeck"]
-        self.assertEqual(change_calls, [])
-
-    def test_route_raises_for_non_focus_recall_card(self) -> None:
-        client = FakeClient()
-        client.cards[201] = {"cardId": 201, "note": 2, "ord": 1, "deckName": "words"}
-
-        with self.assertRaises(ankiconnect_import.AnkiImportError):
-            ankiconnect_import.route_trvs_chunk_cards(client, [2], base_deck="words")
-
-        change_calls = [call for call in client.calls if call[0] == "changeDeck"]
-        self.assertEqual(change_calls, [])
+    def test_exact_reimport_is_idempotent_and_does_not_reset(self) -> None:
+        client = FakeClient(group="defer")
+        repeated = note(
+            timestamp="2026-08-09T01:00:00Z",
+            raw="The storm inflicted damage.",
+        )
+        repeated["encounter_id"] = "old"
+        summary = ankiconnect_import.upsert_context_anchor_notes(
+            client, [repeated], base_deck="words", model="TRVS-Lab"
+        )
+        mutations = {
+            "updateNote",
+            "forgetCards",
+            "changeDeck",
+            "addNote",
+            "addNotes",
+        }
+        self.assertEqual(summary["idempotent"], 1)
+        self.assertFalse(any(action in mutations for action, _ in client.calls))
 
 
 if __name__ == "__main__":

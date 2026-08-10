@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Merge coach-only JSON files with partial.json (tags, source, source_context)."""
+"""Merge agent-authored coaching fields with every exported Eudic encounter."""
+
 from __future__ import annotations
 
 import argparse
@@ -7,101 +8,104 @@ import json
 import sys
 from pathlib import Path
 
-from coach_fields import (
-    TARGET_CHUNK_CLOZE_KEYS,
-    TARGET_CHUNK_KEYS,
-    TARGET_CHUNK_MEANING_KEYS,
-    TARGET_CHUNK_SENTENCE_KEYS,
-    first_text_field,
-    fuse_pos_into_meaning,
-    normalize_learning_priority,
+from coach_fields import fuse_pos_into_meaning, normalize_word_key
+
+COACH_FIELDS = (
+    "pronunciation",
+    "part_of_speech",
+    "english_definition",
+    "word_family",
+    "card_sentence",
+    "sentence_origin",
+    "source_chunk",
+    "source_chunk_meaning",
+    "learning_group",
+    "audio_html",
+)
+ENCOUNTER_FIELDS = (
+    "source",
+    "source_context",
+    "category_id",
+    "category_name",
+    "add_time_utc",
+    "add_time_local",
+    "tags",
 )
 
 
-def _normalize_list(value: object) -> list[str]:
+def _list(value: object) -> list[str]:
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
     text = str(value or "").strip()
     return [text] if text else []
 
 
-def _note_pos(note: dict) -> str:
-    for key in ("part_of_speech", "pos", "词性"):
-        value = note.get(key)
-        if value not in (None, ""):
-            return str(value).strip()
-    return ""
-
-def _note_learning_priority(note: dict) -> str:
-    for key in ("learning_priority", "priority", "学习优先级"):
-        value = note.get(key)
-        if value not in (None, ""):
-            return normalize_learning_priority(value)
-    return ""
+def _pos(note: dict) -> str:
+    return str(
+        note.get("part_of_speech") or note.get("pos") or note.get("词性") or ""
+    ).strip()
 
 
 def main() -> int:
-    p = argparse.ArgumentParser()
-    p.add_argument("--partial", type=Path, required=True)
-    p.add_argument("--coach", type=Path, action="append", required=True)
-    p.add_argument("-o", "--output", type=Path, required=True)
-    args = p.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--partial", type=Path, required=True)
+    parser.add_argument("--coach", type=Path, action="append", required=True)
+    parser.add_argument("-o", "--output", type=Path, required=True)
+    args = parser.parse_args()
 
     partial = json.loads(args.partial.read_text(encoding="utf-8"))
-    meta = {
-        n["word"]: {
-            "source": n.get("source"),
-            "source_context": n.get("source_context", ""),
-            "tags": n.get("tags"),
-        }
-        for n in partial.get("notes", [])
-    }
-
-    by_word: dict[str, dict] = {}
+    encounters = partial.get("notes", [])
+    coaches: dict[str, list[dict]] = {}
     for path in args.coach:
         data = json.loads(path.read_text(encoding="utf-8"))
-        for n in data.get("notes", []):
-            w = str(n.get("word") or "").strip()
-            if w:
-                by_word[w] = n
+        for note in data.get("notes", []):
+            key = normalize_word_key(note.get("word"))
+            if key:
+                coaches.setdefault(key, []).append(note)
 
-    out_notes: list[dict] = []
-    for n in partial.get("notes", []):
-        w = n["word"]
-        c = by_word.get(w)
-        if not c:
-            print(f"missing coach for {w!r}", file=sys.stderr)
+    output: list[dict] = []
+    positions: dict[str, int] = {}
+    for encounter in encounters:
+        word = str(encounter.get("word") or "").strip()
+        key = normalize_word_key(word)
+        candidates = coaches.get(key, [])
+        if not candidates:
+            print(f"missing coach for {word!r}", file=sys.stderr)
             return 1
-        m = meta[w]
-        pos = _note_pos(c)
-        meaning = fuse_pos_into_meaning(_normalize_list(c.get("meaning", [])), pos)
-        out_notes.append(
-            {
-                "word": w,
-                "pronunciation": c.get("pronunciation", ""),
-                "part_of_speech": pos,
-                "meaning": meaning,
-                "english_definition": c.get("english_definition", ""),
-                "root": c.get("root", ""),
-                "example": c.get("example", ""),
-                "collocations": c.get("collocations", []),
-                "audio_html": c.get("audio_html", ""),
-                "learning_priority": _note_learning_priority(c),
-                "target_chunk": first_text_field(c, TARGET_CHUNK_KEYS),
-                "target_chunk_meaning": first_text_field(c, TARGET_CHUNK_MEANING_KEYS),
-                "target_chunk_sentence": first_text_field(c, TARGET_CHUNK_SENTENCE_KEYS),
-                "target_chunk_cloze": first_text_field(c, TARGET_CHUNK_CLOZE_KEYS),
-                "source": m.get("source"),
-                "source_context": m.get("source_context", ""),
-                "tags": m.get("tags"),
-            }
-        )
+        position = positions.get(key, 0)
+        coach = candidates[position] if position < len(candidates) else candidates[-1]
+        positions[key] = position + 1
+        if len(candidates) == 1 and position > 0:
+            origin = str(coach.get("sentence_origin") or "")
+            if origin == "adapted":
+                print(
+                    f"{word!r} has multiple source encounters but only one adapted coach; "
+                    "author one coach entry per encounter",
+                    file=sys.stderr,
+                )
+                return 1
+        pos = _pos(coach)
+        merged = {
+            "word": word,
+            "meaning": fuse_pos_into_meaning(_list(coach.get("meaning")), pos),
+        }
+        for field in COACH_FIELDS:
+            if field == "part_of_speech":
+                merged[field] = pos
+            else:
+                merged[field] = coach.get(field, "")
+        for field in ENCOUNTER_FIELDS:
+            default: object = [] if field == "tags" else ""
+            merged[field] = encounter.get(field, default)
+        if len(candidates) == 1 and str(coach.get("sentence_origin") or "") == "source":
+            merged["card_sentence"] = merged["source_context"]
+        output.append(merged)
 
     args.output.write_text(
-        json.dumps({"notes": out_notes}, ensure_ascii=False, indent=2) + "\n",
+        json.dumps({"notes": output}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"Wrote {len(out_notes)} notes -> {args.output}")
+    print(f"Wrote {len(output)} encounter notes -> {args.output}")
     return 0
 
 

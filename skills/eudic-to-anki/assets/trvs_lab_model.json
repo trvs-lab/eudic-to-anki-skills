@@ -2,30 +2,29 @@
   "model_name": "TRVS-Lab",
   "fields": [
     "单词",
+    "规范词形",
     "音标",
-    "释义",
+    "语境释义",
     "英英",
-    "词根",
-    "例句",
-    "常用搭配",
-    "目标短语块",
-    "短语块锚点",
-    "短语块例句",
-    "短语块挖空",
-    "发音",
-    "学习标记"
+    "原始来源",
+    "卡片例句",
+    "例句来源",
+    "来源词块",
+    "词块释义",
+    "词族构词",
+    "历史语境",
+    "遇见次数",
+    "最近遇见",
+    "遇见记录",
+    "学习分组",
+    "发音"
   ],
+  "css_path": "trvs_lab_styling.css",
   "card_templates": [
     {
-      "Name": "Chunk Anchor",
-      "FrontPath": "trvs_lab_chunk_anchor_front.html",
-      "BackPath": "trvs_lab_chunk_anchor_back.html"
-    },
-    {
-      "Name": "Chunk Recall",
-      "FrontPath": "trvs_lab_chunk_recall_front.html",
-      "BackPath": "trvs_lab_chunk_recall_back.html"
+      "Name": "Context Anchor",
+      "FrontPath": "trvs_lab_front.html",
+      "BackPath": "trvs_lab_back.html"
     }
-  ],
-  "css_path": "trvs_lab_styling.css"
+  ]
 }

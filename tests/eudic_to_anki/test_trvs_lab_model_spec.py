@@ -10,109 +10,87 @@ ASSETS = ROOT / "skills" / "eudic-to-anki" / "assets"
 
 
 class TrvsLabModelSpecTests(unittest.TestCase):
-    def test_model_spec_has_phrase_chunk_fields(self) -> None:
-        spec = json.loads((ASSETS / "trvs_lab_model.json").read_text(encoding="utf-8"))
-        self.assertIn("目标短语块", spec["fields"])
-        self.assertIn("短语块锚点", spec["fields"])
-        self.assertIn("短语块例句", spec["fields"])
-        self.assertIn("短语块挖空", spec["fields"])
+    def setUp(self) -> None:
+        self.spec = json.loads(
+            (ASSETS / "trvs_lab_model.json").read_text(encoding="utf-8")
+        )
 
-    def test_model_spec_has_anchor_and_recall_templates(self) -> None:
-        spec = json.loads((ASSETS / "trvs_lab_model.json").read_text(encoding="utf-8"))
-        names = [template["Name"] for template in spec["card_templates"]]
-        self.assertEqual(names, ["Chunk Anchor", "Chunk Recall"])
+    def test_model_has_context_anchor_fields_and_one_template(self) -> None:
+        self.assertEqual(
+            self.spec["fields"],
+            [
+                "单词",
+                "规范词形",
+                "音标",
+                "语境释义",
+                "英英",
+                "原始来源",
+                "卡片例句",
+                "例句来源",
+                "来源词块",
+                "词块释义",
+                "词族构词",
+                "历史语境",
+                "遇见次数",
+                "最近遇见",
+                "遇见记录",
+                "学习分组",
+                "发音",
+            ],
+        )
+        self.assertEqual(
+            [template["Name"] for template in self.spec["card_templates"]],
+            ["Context Anchor"],
+        )
 
-    def test_template_files_exist_and_reference_new_fields(self) -> None:
-        anchor_front = (ASSETS / "trvs_lab_chunk_anchor_front.html").read_text(encoding="utf-8")
-        anchor_back = (ASSETS / "trvs_lab_chunk_anchor_back.html").read_text(encoding="utf-8")
-        recall_front = (ASSETS / "trvs_lab_chunk_recall_front.html").read_text(encoding="utf-8")
-        recall_back = (ASSETS / "trvs_lab_chunk_recall_back.html").read_text(encoding="utf-8")
-        self.assertIn("{{目标短语块}}", anchor_front)
-        self.assertIn("{{短语块例句}}", anchor_front)
-        self.assertNotIn("{{例句}}", anchor_front)
-        self.assertIn("{{FrontSide}}", anchor_back)
-        self.assertIn("phrase-confirmation", anchor_back)
-        self.assertIn("{{短语块锚点}}", anchor_back)
-        self.assertIn("{{#例句}}", anchor_back)
-        self.assertIn("{{/例句}}", anchor_back)
-        self.assertIn("word-header", anchor_back)
-        self.assertIn("{{单词}}", anchor_back)
-        self.assertLess(anchor_back.index("{{单词}}"), anchor_back.index("{{音标}}"))
-        self.assertLess(anchor_back.index("{{音标}}"), anchor_back.index("{{释义}}"))
-        self.assertLess(anchor_back.index("{{短语块锚点}}"), anchor_back.index("{{单词}}"))
-        self.assertLess(anchor_back.index("{{单词}}"), anchor_back.index("{{例句}}"))
-        self.assertIn("{{#短语块挖空}}", recall_front)
-        self.assertLess(recall_front.index("{{短语块挖空}}"), recall_front.index("{{短语块锚点}}"))
-        self.assertIn("recall-hint", recall_front)
-        self.assertIn("recall-blank", recall_front)
-        self.assertIn("{{目标短语块}}", recall_back)
-        self.assertNotIn("{{短语块例句}}", recall_back)
-        self.assertIn("{{#例句}}", recall_back)
-        self.assertNotIn("{{短语块锚点}}", recall_back)
-        self.assertIn("recall-answer-head", recall_back)
-        self.assertIn("word-header", recall_back)
-        self.assertIn("{{单词}}", recall_back)
-        self.assertLess(recall_back.index("{{单词}}"), recall_back.index("{{音标}}"))
-        self.assertLess(recall_back.index("{{音标}}"), recall_back.index("{{释义}}"))
-        self.assertLess(recall_back.index("{{目标短语块}}"), recall_back.index("{{单词}}"))
-        self.assertLess(recall_back.index("{{单词}}"), recall_back.index("{{例句}}"))
+    def test_front_only_renders_word_sentence_and_clickable_audio(self) -> None:
+        template = self.spec["card_templates"][0]
+        front = (ASSETS / template["FrontPath"]).read_text(encoding="utf-8")
+        self.assertIn("{{单词}}", front)
+        self.assertIn("{{卡片例句}}", front)
+        self.assertIn("{{发音}}", front)
+        self.assertIn("playAudio", front)
+        for hidden_field in (
+            "音标",
+            "语境释义",
+            "英英",
+            "来源词块",
+            "词族构词",
+            "历史语境",
+            "遇见次数",
+            "最近遇见",
+            "学习分组",
+            "例句来源",
+            "原始来源",
+        ):
+            self.assertNotIn("{{" + hidden_field + "}}", front)
+
+    def test_back_is_unfolded_and_follows_information_order(self) -> None:
+        template = self.spec["card_templates"][0]
+        back = (ASSETS / template["BackPath"]).read_text(encoding="utf-8")
+        ordered_fields = [
+            "语境释义",
+            "音标",
+            "英英",
+            "来源词块",
+            "词块释义",
+            "词族构词",
+            "历史语境",
+            "遇见次数",
+            "最近遇见",
+        ]
+        positions = [back.index("{{" + name + "}}") for name in ordered_fields]
+        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn("<details", back)
+        self.assertNotIn("{{学习分组}}", back)
+        self.assertNotIn("priority-marker", back)
+        self.assertNotIn("Chunk Recall", back)
 
     def test_model_referenced_assets_exist(self) -> None:
-        spec = json.loads((ASSETS / "trvs_lab_model.json").read_text(encoding="utf-8"))
-        for template in spec["card_templates"]:
+        for template in self.spec["card_templates"]:
             self.assertTrue((ASSETS / template["FrontPath"]).is_file())
             self.assertTrue((ASSETS / template["BackPath"]).is_file())
-        self.assertTrue((ASSETS / spec["css_path"]).is_file())
-
-    def test_anchor_highlighter_wraps_text_nodes_without_rewriting_markup(self) -> None:
-        anchor_front = (ASSETS / "trvs_lab_chunk_anchor_front.html").read_text(encoding="utf-8")
-        self.assertNotIn("instance.innerHTML = instance.innerHTML.replace", anchor_front)
-        self.assertIn("document.createTreeWalker", anchor_front)
-        self.assertIn("NodeFilter.SHOW_TEXT", anchor_front)
-        self.assertIn("createHighlightNode", anchor_front)
-        self.assertNotIn("split(/\\s+/)", anchor_front)
-        self.assertIn("var phrase = chunk.textContent.trim()", anchor_front)
-
-    def test_recall_front_styles_keep_cloze_as_primary_prompt(self) -> None:
-        styling = (ASSETS / "trvs_lab_styling.css").read_text(encoding="utf-8")
-        self.assertIn("trvs-style-version: source-readable-recall-compact-v1", styling)
-        self.assertIn("-webkit-font-smoothing: antialiased", styling)
-        self.assertIn("overflow-x: hidden", styling)
-        self.assertIn(".source-example", styling)
-        self.assertIn(".english-definition", styling)
-        self.assertIn(".chunk-recall-card .items + .items", styling)
-        self.assertIn(".chunk-recall-card {", styling)
-        self.assertIn("padding-bottom: 4px", styling)
-        self.assertIn(".chunk-recall-card .recall-cloze", styling)
-        self.assertIn(
-            ".chunk-recall-card .recall-cloze {\n"
-            "  color: rgba(0, 0, 0, 0.84);\n"
-            "  font-size: 20px;\n"
-            "  font-weight: 500;\n"
-            "  line-height: 1.45;",
-            styling,
-        )
-        self.assertIn(
-            ".source-example {\n"
-            "  color: rgba(0, 0, 0, 0.82);\n"
-            "  font-size: 20px;",
-            styling,
-        )
-        self.assertIn(
-            ".english-definition {\n"
-            "  color: rgba(0, 0, 0, 0.82);\n"
-            "  font-size: 20px;",
-            styling,
-        )
-        self.assertIn(".chunk-recall-card .recall-hint", styling)
-        self.assertIn("font-size: 18px", styling)
-        self.assertIn("background: transparent", styling)
-        self.assertIn(".recall-blank", styling)
-        self.assertIn("border-bottom: 0", styling)
-        self.assertIn(".chunk-recall-answer .recall-answer-head", styling)
-        self.assertIn(".chunk-answer .phrase-confirmation", styling)
-        self.assertIn(".word-header", styling)
-        self.assertIn("overflow-wrap: anywhere", styling)
+        self.assertTrue((ASSETS / self.spec["css_path"]).is_file())
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@
 ## 输出
 
 - `<ABS_TEMP_DIR>/*_export.csv`（推荐；例如 `/Users/alice/Documents/eudic-to-anki-temp/*_export.csv`）
+- 每行保留 `category_id`、`category_name`、`add_time_utc`、`add_time_local` 和 `context_line`。同一单词的多次遇见不得在导出或占位阶段去重。
 
 ## 执行约束
 

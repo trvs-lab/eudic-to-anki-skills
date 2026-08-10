@@ -18,27 +18,32 @@ def valid_note(**overrides: object) -> dict[str, object]:
         "word": "inflict",
         "pronunciation": "/ɪnˈflɪkt/",
         "part_of_speech": "vt.",
-        "meaning": ["vt. 造成；使承受"],
-        "english_definition": "to make someone suffer harm, pain, or damage",
-        "root": "in-（进入）+ flict（打击）",
-        "example": "The storm inflicted serious damage on the town.",
-        "collocations": ["inflict pain on", "inflict punishment on"],
+        "meaning": ["vt. 使遭受；造成"],
+        "english_definition": "to make someone suffer something unpleasant",
+        "word_family": "in-（向内）+ flict（打击）",
+        "source_context": "The storm inflicted serious damage on the town.",
+        "card_sentence": "The storm inflicted serious damage on the town.",
+        "sentence_origin": "source",
+        "source_chunk": "inflicted serious damage on",
+        "source_chunk_meaning": "给……造成严重破坏",
+        "learning_group": "learn",
+        "category_id": "book-1",
+        "add_time_utc": "2026-08-10T01:00:00Z",
         "audio_html": "",
-        "learning_priority": "focus",
-        "target_chunk": "inflict damage on",
-        "target_chunk_meaning": "造成严重伤害",
-        "target_chunk_sentence": "The storm can inflict damage on a town.",
-        "target_chunk_cloze": "The storm can ____ a town.",
     }
     note.update(overrides)
     return note
 
 
-class ValidatePhraseChunkTests(unittest.TestCase):
-    def run_validator(self, note: dict[str, object]) -> subprocess.CompletedProcess[str]:
+class ValidateContextAnchorTests(unittest.TestCase):
+    def run_validator(
+        self, note: dict[str, object]
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "notes.json"
-            path.write_text(json.dumps({"notes": [note]}, ensure_ascii=False), encoding="utf-8")
+            path.write_text(
+                json.dumps({"notes": [note]}, ensure_ascii=False), encoding="utf-8"
+            )
             return subprocess.run(
                 [sys.executable, str(VALIDATOR), str(path)],
                 cwd=SKILL,
@@ -47,258 +52,129 @@ class ValidatePhraseChunkTests(unittest.TestCase):
                 stderr=subprocess.PIPE,
             )
 
-    def run_validator_path(self, path: Path) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [sys.executable, str(VALIDATOR), str(path)],
-            cwd=SKILL,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-
-    def test_accepts_valid_focus_phrase_chunk_note(self) -> None:
-        result = self.run_validator(valid_note())
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_accepts_empty_source_example_when_chunk_sentence_exists(self) -> None:
-        result = self.run_validator(valid_note(example=""))
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_accepts_valid_alias_only_phrase_chunk_note(self) -> None:
-        note = valid_note(
-            目标短语块="inflict damage on",
-            短语块锚点="造成严重伤害",
-            短语块例句="The storm can inflict damage on a town.",
-            短语块挖空="The storm can ____ a town.",
-        )
-        del note["target_chunk"]
-        del note["target_chunk_meaning"]
-        del note["target_chunk_sentence"]
-        del note["target_chunk_cloze"]
-
-        result = self.run_validator(note)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_requires_target_chunk(self) -> None:
-        result = self.run_validator(valid_note(target_chunk=""))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("target_chunk must not be empty", result.stderr)
-
-    def test_requires_target_chunk_meaning(self) -> None:
-        result = self.run_validator(valid_note(target_chunk_meaning=""))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("target_chunk_meaning must not be empty", result.stderr)
-
-    def test_requires_target_chunk_sentence(self) -> None:
-        result = self.run_validator(valid_note(target_chunk_sentence=""))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("target_chunk_sentence must not be empty", result.stderr)
-
-    def test_rejects_chunk_sentence_without_target_chunk(self) -> None:
-        result = self.run_validator(
-            valid_note(target_chunk_sentence="The storm damaged the town.")
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(
-            "target_chunk_sentence must contain one of the provided target_chunk values",
-            result.stderr,
-        )
-
-    def test_rejects_chunk_sentence_that_only_contains_target_chunk_as_substring(self) -> None:
-        result = self.run_validator(
+    def test_accepts_source_adapted_and_generated_sentences(self) -> None:
+        cases = [
+            valid_note(),
             valid_note(
-                target_chunk="quick reflex",
-                target_chunk_sentence="His quick reflexes helped him react in time.",
-                target_chunk_cloze="His ____es helped him react in time.",
-            )
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(
-            "target_chunk_sentence must contain one of the provided target_chunk values",
-            result.stderr,
-        )
-
-    def test_rejects_invalid_canonical_chunk_sentence_even_with_valid_alias(self) -> None:
-        result = self.run_validator(
+                card_sentence="The storm inflicted serious damage.",
+                sentence_origin="adapted",
+                source_chunk="inflicted serious damage",
+            ),
             valid_note(
-                target_chunk_sentence="The storm damaged the town.",
-                短语块例句="The storm can inflict damage on a town.",
-            )
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(
-            "target_chunk_sentence must contain one of the provided target_chunk values",
-            result.stderr,
-        )
-
-    def test_requires_focus_cloze(self) -> None:
-        result = self.run_validator(valid_note(target_chunk_cloze=""))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("focus notes need target_chunk_cloze", result.stderr)
-
-    def test_rejects_cloze_not_derived_from_chunk_sentence(self) -> None:
-        result = self.run_validator(
-            valid_note(target_chunk_cloze="The storm ____ serious damage on the town.")
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("target_chunk_cloze must be derived from target_chunk_sentence", result.stderr)
-
-    def test_rejects_passive_cloze(self) -> None:
-        result = self.run_validator(
-            valid_note(learning_priority="passive", target_chunk_cloze="Fear can ____ judgment.")
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("passive notes must leave target_chunk_cloze empty", result.stderr)
-
-    def test_rejects_ignore_cloze(self) -> None:
-        result = self.run_validator(
-            valid_note(learning_priority="ignore", target_chunk_cloze="Fear can ____ judgment.")
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("ignore notes must leave target_chunk_cloze empty", result.stderr)
-
-    def test_rejects_cloze_without_blank(self) -> None:
-        result = self.run_validator(valid_note(target_chunk_cloze="The storm inflicted damage."))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("target_chunk_cloze must contain a blank", result.stderr)
-
-    def test_rejects_short_bracket_blank_cloze(self) -> None:
-        result = self.run_validator(valid_note(target_chunk_cloze="[blank] damage on town"))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("target_chunk_cloze must be a natural sentence", result.stderr)
-
-    def test_rejects_word_level_chunk_meaning(self) -> None:
-        result = self.run_validator(valid_note(target_chunk_meaning="vt. 造成；使承受"))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(
-            "target_chunk_meaning should be a phrase-level Chinese anchor",
-            result.stderr,
-        )
-
-    def test_rejects_word_level_chunk_meaning_alias_even_with_valid_canonical(self) -> None:
-        result = self.run_validator(valid_note(短语块锚点="vt. 造成；使承受"))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(
-            "target_chunk_meaning should be a phrase-level Chinese anchor",
-            result.stderr,
-        )
-
-    def test_rejects_long_chunk_meaning(self) -> None:
-        result = self.run_validator(
-            valid_note(target_chunk_meaning="这是一个明显超过二十四个汉字的中文短语块锚点内容用于测试")
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(
-            "target_chunk_meaning should be a phrase-level Chinese anchor",
-            result.stderr,
-        )
-
-    def test_rejects_long_chunk_meaning_alias_even_with_valid_canonical(self) -> None:
-        result = self.run_validator(
-            valid_note(短语块锚点="这是一个明显超过二十四个汉字的中文短语块锚点内容用于测试")
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(
-            "target_chunk_meaning should be a phrase-level Chinese anchor",
-            result.stderr,
-        )
-
-    def test_rejects_cloze_alias_without_blank_even_with_valid_canonical(self) -> None:
-        result = self.run_validator(valid_note(短语块挖空="The storm inflicted damage."))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("target_chunk_cloze must contain a blank", result.stderr)
-
-    def test_rejects_short_cloze_alias_even_with_valid_canonical(self) -> None:
-        result = self.run_validator(valid_note(短语块挖空="[blank] damage on town"))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("target_chunk_cloze must be a natural sentence", result.stderr)
-
-    def test_rejects_non_focus_cloze_alias_even_when_canonical_empty(self) -> None:
-        for priority in ("passive", "ignore"):
-            with self.subTest(priority=priority):
-                result = self.run_validator(
-                    valid_note(
-                        learning_priority=priority,
-                        target_chunk_cloze="",
-                        短语块挖空="Fear can ____ judgment.",
-                    )
-                )
-                self.assertEqual(result.returncode, 1)
-                self.assertIn(
-                    f"{priority} notes must leave target_chunk_cloze empty",
-                    result.stderr,
-                )
-
-    def test_rejects_non_string_phrase_chunk_fields(self) -> None:
-        cases: list[tuple[str, object]] = [
-            ("target_chunk", ["inflict damage on"]),
-            ("target_chunk", {"chunk": "inflict damage on"}),
-            ("target_chunk", 456),
-            ("target_chunk", []),
-            ("target_chunk_meaning", ["造成严重伤害"]),
-            ("target_chunk_meaning", {"meaning": "造成严重伤害"}),
-            ("target_chunk_meaning", 456),
-            ("target_chunk_meaning", {}),
-            ("target_chunk_sentence", ["The storm can inflict damage on a town."]),
-            ("target_chunk_sentence", {"sentence": "The storm can inflict damage on a town."}),
-            ("target_chunk_sentence", 456),
-            ("target_chunk_sentence", {}),
-            ("target_chunk_cloze", ["[blank] damage on town"]),
-            ("target_chunk_cloze", {"cloze": "[blank] damage on town"}),
-            ("target_chunk_cloze", 456),
-            ("target_chunk_cloze", 0),
-            ("target_chunk_cloze", False),
+                source_context="",
+                card_sentence="Criticism can inflict lasting harm on a young child.",
+                sentence_origin="generated",
+                source_chunk="",
+                source_chunk_meaning="",
+            ),
         ]
-        for field, value in cases:
-            with self.subTest(field=field, value=type(value).__name__):
-                result = self.run_validator(valid_note(**{field: value}))
-                self.assertEqual(result.returncode, 1)
-                self.assertIn(f"field {field!r} must be a string", result.stderr)
-
-    def test_rejects_non_string_target_chunk_alias_even_with_valid_canonical(self) -> None:
-        for value in (["inflict damage on"], []):
-            with self.subTest(value=type(value).__name__):
-                result = self.run_validator(valid_note(目标短语块=value))
-                self.assertEqual(result.returncode, 1)
-                self.assertIn("field '目标短语块' must be a string", result.stderr)
-
-    def test_rejects_non_string_target_chunk_meaning_alias_even_with_valid_canonical(self) -> None:
-        for value in ({"meaning": "造成严重伤害"}, {}):
-            with self.subTest(value=type(value).__name__):
-                result = self.run_validator(valid_note(短语块锚点=value))
-                self.assertEqual(result.returncode, 1)
-                self.assertIn("field '短语块锚点' must be a string", result.stderr)
-
-    def test_rejects_non_string_target_chunk_cloze_alias_even_with_valid_canonical(self) -> None:
-        for value in (123, 0, False):
-            with self.subTest(value=type(value).__name__):
-                result = self.run_validator(valid_note(短语块挖空=value))
-                self.assertEqual(result.returncode, 1)
-                self.assertIn("field '短语块挖空' must be a string", result.stderr)
-
-    def test_rejects_non_string_target_chunk_sentence_alias_even_with_valid_canonical(self) -> None:
-        for value in (["The storm can inflict damage on a town."], {}):
-            with self.subTest(value=type(value).__name__):
-                result = self.run_validator(valid_note(短语块例句=value))
-                self.assertEqual(result.returncode, 1)
-                self.assertIn("field '短语块例句' must be a string", result.stderr)
-
-    def test_phrase_chunk_fixture_files_validate(self) -> None:
-        fixtures = [
-            ROOT / "tests" / "eudic_to_anki" / "fixtures" / "chunk_focus_import.json",
-            ROOT / "tests" / "eudic_to_anki" / "fixtures" / "chunk_passive_import.json",
-        ]
-        for path in fixtures:
-            with self.subTest(path=path.name):
-                result = self.run_validator_path(path)
+        for case in cases:
+            with self.subTest(origin=case["sentence_origin"]):
+                result = self.run_validator(case)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_passive_fixture_covers_empty_source_example(self) -> None:
-        path = ROOT / "tests" / "eudic_to_anki" / "fixtures" / "chunk_passive_import.json"
-        note = json.loads(path.read_text(encoding="utf-8"))["notes"][0]
-        self.assertEqual(note["example"], "")
-        result = self.run_validator_path(path)
-        self.assertEqual(result.returncode, 0, result.stderr)
+    def test_requires_generated_sentence_when_source_is_missing(self) -> None:
+        result = self.run_validator(
+            valid_note(source_context="", card_sentence="", sentence_origin="generated")
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("card_sentence must not be empty", result.stderr)
+
+    def test_generated_sentence_must_contain_target_word(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                source_context="",
+                card_sentence="Criticism can cause lasting harm to a child.",
+                sentence_origin="generated",
+                source_chunk="",
+                source_chunk_meaning="",
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("card_sentence must contain the target word", result.stderr)
+
+    def test_generated_sentence_has_practical_default_length(self) -> None:
+        too_short = self.run_validator(
+            valid_note(
+                source_context="",
+                card_sentence="They inflict harm.",
+                sentence_origin="generated",
+                source_chunk="",
+                source_chunk_meaning="",
+            )
+        )
+        self.assertEqual(too_short.returncode, 1)
+        self.assertIn(
+            "generated card_sentence should contain 8-16 words", too_short.stderr
+        )
+
+    def test_source_chunk_is_optional_but_must_be_traceable(self) -> None:
+        omitted = self.run_validator(
+            valid_note(source_chunk="", source_chunk_meaning="")
+        )
+        self.assertEqual(omitted.returncode, 0, omitted.stderr)
+
+        invalid = self.run_validator(valid_note(source_chunk="inflict pain on"))
+        self.assertEqual(invalid.returncode, 1)
+        self.assertIn("source_chunk must occur in card_sentence", invalid.stderr)
+
+    def test_rewritten_source_must_be_marked_adapted(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                card_sentence="The storm inflicted serious damage.",
+                sentence_origin="source",
+                source_chunk="inflicted serious damage",
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "use adapted when card_sentence rewrites source_context", result.stderr
+        )
+
+    def test_requires_stable_encounter_identity(self) -> None:
+        result = self.run_validator(valid_note(add_time_utc=""))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("encounter time is required", result.stderr)
+
+    def test_reject_group_is_reserved_for_invalid_fragments(self) -> None:
+        complete = self.run_validator(valid_note(learning_group="reject"))
+        self.assertEqual(complete.returncode, 1)
+        self.assertIn("reject is only for invalid fragments", complete.stderr)
+
+        fragment = self.run_validator(
+            valid_note(
+                word="x",
+                pronunciation="",
+                meaning=[],
+                english_definition="",
+                word_family="",
+                source_context="",
+                card_sentence="",
+                sentence_origin="",
+                source_chunk="",
+                source_chunk_meaning="",
+                learning_group="reject",
+            )
+        )
+        self.assertEqual(fragment.returncode, 0, fragment.stderr)
+
+    def test_skip_accepts_complete_words_and_phrases(self) -> None:
+        cases = (
+            ("sphinx", "The stone sphinx guarded the entrance to the old temple."),
+            ("by and large", "By and large, the new process works as expected."),
+        )
+        for word, sentence in cases:
+            result = self.run_validator(
+                valid_note(
+                    word=word,
+                    learning_group="skip",
+                    source_context=sentence,
+                    card_sentence=sentence,
+                    source_chunk="",
+                    source_chunk_meaning="",
+                )
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
-"""Build final week import JSON: merge minimal coach mapping + optional CSV metadata.
+"""Merge a word-to-coach mapping with all rows in an Eudic CSV export."""
 
-The default `eudic-to-anki` skill path is agent-written IPA only; this helper still
-applies Eudic `phon` when building from `minimal_coach_week.json` unless you change it to rely on
-agent-filled `pronunciation` in the mapping instead. It also preserves `context_line` as
-`source_context` for source-only examples.
-"""
 from __future__ import annotations
 
 import argparse
@@ -14,18 +9,9 @@ import importlib.util
 import json
 from pathlib import Path
 
-from coach_fields import (
-    TARGET_CHUNK_CLOZE_KEYS,
-    TARGET_CHUNK_KEYS,
-    TARGET_CHUNK_MEANING_KEYS,
-    TARGET_CHUNK_SENTENCE_KEYS,
-    first_text_field,
-    fuse_pos_into_meaning,
-    normalize_learning_priority,
-)
+from coach_fields import fuse_pos_into_meaning, normalize_word_key
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SKILL_DIR = SCRIPT_DIR.parent
 
 
 def _load_build_module():
@@ -33,130 +19,77 @@ def _load_build_module():
     spec = importlib.util.spec_from_file_location("build_dia", path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Cannot load build_dia_json_from_csv.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def phon_map_first_row(csv_path: Path, build_mod) -> dict[str, str]:
-    first: dict[str, str] = {}
-    with csv_path.open("r", encoding="utf-8", newline="") as f:
-        for row in csv.DictReader(f):
-            w = (row.get("word") or "").strip()
-            if not w or w in first:
-                continue
-            first[w] = build_mod.clean_eudic_phon(str(row.get("phon") or ""), word=w)
-    return first
-
-
-def source_context_map_first_row(csv_path: Path, build_mod) -> dict[str, str]:
-    first: dict[str, str] = {}
-    with csv_path.open("r", encoding="utf-8", newline="") as f:
-        for row in csv.DictReader(f):
-            w = (row.get("word") or "").strip()
-            if not w or w in first:
-                continue
-            first[w] = build_mod.clean_context_line(row.get("context_line") or "")
-    return first
-
-
-def note_pos(note: dict) -> str:
-    for key in ("part_of_speech", "pos", "词性"):
-        value = note.get(key)
-        if value not in (None, ""):
-            return str(value).strip()
-    return ""
-
-def _note_learning_priority(note: dict) -> str:
-    for key in ("learning_priority", "priority", "学习优先级"):
-        value = note.get(key)
-        if value not in (None, ""):
-            return normalize_learning_priority(value)
-    return ""
+def _list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    return [text] if text else []
 
 
 def main() -> int:
-    p = argparse.ArgumentParser()
-    p.add_argument("--csv", type=Path, required=True)
-    p.add_argument("--coach-json", type=Path, required=True, help="Word -> coach fields (minimal)")
-    p.add_argument("--output", type=Path, required=True)
-    p.add_argument(
-        "--tags-from",
-        type=Path,
-        default=None,
-        help="Optional previous import JSON to copy source/tags per word",
-    )
-    args = p.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", type=Path, required=True)
+    parser.add_argument("--coach-json", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--tags-from", type=Path)
+    args = parser.parse_args()
 
-    coach = json.loads(args.coach_json.read_text(encoding="utf-8"))
-    if not isinstance(coach, dict):
-        raise SystemExit("coach-json must be an object mapping word -> fields")
-
-    build_mod = _load_build_module()
-    phon = phon_map_first_row(args.csv, build_mod)
-    source_contexts = source_context_map_first_row(args.csv, build_mod)
-
-    tags_meta: dict[str, dict] = {}
-    if args.tags_from and args.tags_from.exists():
-        prev = json.loads(args.tags_from.read_text(encoding="utf-8"))
-        for n in prev.get("notes", []):
-            w = str(n.get("word") or "").strip()
-            if w:
-                tags_meta[w] = {
-                    "source": n.get("source", "eudic cloud"),
-                    "source_context": n.get("source_context", ""),
-                    "tags": n.get("tags", []),
-                }
-
+    coach_raw = json.loads(args.coach_json.read_text(encoding="utf-8"))
+    if not isinstance(coach_raw, dict):
+        raise SystemExit("coach-json must map word -> fields")
+    coaches = {normalize_word_key(word): value for word, value in coach_raw.items()}
+    build = _load_build_module()
     notes: list[dict] = []
-    seen: set[str] = set()
-    with args.csv.open("r", encoding="utf-8", newline="") as f:
-        for row in csv.DictReader(f):
-            w = (row.get("word") or "").strip()
-            if not w or w in seen:
+    with args.csv.open("r", encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            word = str(row.get("word") or "").strip()
+            if not word:
                 continue
-            seen.add(w)
-            if w not in coach:
-                raise SystemExit(f"Missing coach entry for word: {w!r}")
-            c = coach[w]
-            meta = tags_meta.get(
-                w, {"source": "eudic cloud", "tags": []}
-            )
-            ipa = phon.get(w, "")
-            raw_meaning = c.get("meaning") or []
-            if not isinstance(raw_meaning, list):
-                meaning_list = [str(raw_meaning).strip()] if str(raw_meaning).strip() else []
-            else:
-                meaning_list = [str(x).strip() for x in raw_meaning if str(x).strip()]
-            pos = note_pos(c)
-            meaning = fuse_pos_into_meaning(meaning_list, pos)
+            coach = coaches.get(normalize_word_key(word))
+            if coach is None:
+                raise SystemExit(f"Missing coach entry for word: {word!r}")
+            pos = str(
+                coach.get("part_of_speech")
+                or coach.get("pos")
+                or coach.get("词性")
+                or ""
+            ).strip()
             notes.append(
                 {
-                    "word": w,
-                    "pronunciation": ipa or str(c.get("pronunciation") or ""),
+                    "word": word,
+                    "pronunciation": str(coach.get("pronunciation") or "")
+                    or build.clean_eudic_phon(str(row.get("phon") or ""), word=word),
                     "part_of_speech": pos,
-                    "meaning": meaning,
-                    "english_definition": c["english_definition"],
-                    "root": c["root"],
-                    "example": c["example"],
-                    "collocations": c["collocations"],
-                    "audio_html": "",
-                    "learning_priority": _note_learning_priority(c),
-                    "target_chunk": first_text_field(c, TARGET_CHUNK_KEYS),
-                    "target_chunk_meaning": first_text_field(c, TARGET_CHUNK_MEANING_KEYS),
-                    "target_chunk_sentence": first_text_field(c, TARGET_CHUNK_SENTENCE_KEYS),
-                    "target_chunk_cloze": first_text_field(c, TARGET_CHUNK_CLOZE_KEYS),
-                    "source": meta["source"],
-                    "source_context": meta.get("source_context") or source_contexts.get(w, ""),
-                    "tags": meta["tags"],
+                    "meaning": fuse_pos_into_meaning(_list(coach.get("meaning")), pos),
+                    "english_definition": coach.get("english_definition", ""),
+                    "word_family": coach.get("word_family", ""),
+                    "card_sentence": coach.get("card_sentence", ""),
+                    "sentence_origin": coach.get("sentence_origin", ""),
+                    "source_chunk": coach.get("source_chunk", ""),
+                    "source_chunk_meaning": coach.get("source_chunk_meaning", ""),
+                    "learning_group": coach.get("learning_group", ""),
+                    "audio_html": coach.get("audio_html", ""),
+                    "source": "eudic cloud",
+                    "source_context": build.clean_context_line(
+                        row.get("context_line") or ""
+                    ),
+                    "category_id": row.get("category_id", ""),
+                    "category_name": row.get("category_name", ""),
+                    "add_time_utc": row.get("add_time_utc", ""),
+                    "add_time_local": row.get("add_time_local", ""),
+                    "tags": [],
                 }
             )
-
     args.output.write_text(
         json.dumps({"notes": notes}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"Wrote {len(notes)} notes to {args.output}")
+    print(f"Wrote {len(notes)} encounters to {args.output}")
     return 0
 
 

@@ -1,260 +1,40 @@
-/* trvs-style-version: source-readable-recall-compact-v1 */
-
-* {
+/* trvs-style-version: context-anchor-v1 */
+.card {
+  --ink: rgba(20, 24, 32, 0.9);
+  --muted: rgba(20, 24, 32, 0.58);
+  --line: rgba(20, 24, 32, 0.12);
+  --accent: #2f6fed;
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body,
-html {
-  font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
-  line-height: 1.3;
-  font-size: 20px;
-  background-color: #f0f0f0;
-  color: #333333;
-  max-width: 100%;
-  overflow-x: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-b {
-  color: #007bff;
-}
-
-.section {
-  border-radius: 13px;
-  background-color: #ffffff;
-  margin: 10px 2px;
-  max-width: 100%;
-  overflow-x: hidden;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.04),
-    0 2px 8px rgba(0, 0, 0, 0.08);
-  color: #333333;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 22px 36px;
+  color: var(--ink);
+  background: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   text-align: left;
-  position: relative;
+  -webkit-font-smoothing: antialiased;
 }
 
-.items + .items {
-  border-top: 1px solid rgba(0, 0, 0, 0.055);
-}
-
-.items {
-  margin: 0 14px;
-  padding: 10px 0 8px 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.priority-row {
-  position: absolute;
-  top: 8px;
-  right: 14px;
-  margin: 0;
-  padding: 0;
-  line-height: 1;
-}
-
-.priority-marker {
-  display: block;
+.context-anchor-card { text-align: center; }
+.word-button {
   padding: 0;
   border: 0;
+  color: var(--ink);
   background: transparent;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0;
-  color: rgba(0, 0, 0, 0.46);
-  opacity: 0.4;
+  font: 650 34px/1.2 Georgia, serif;
+  cursor: pointer;
 }
+.word-button:active { color: var(--accent); }
+.word-audio { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+.card-sentence { margin-top: 22px; font: 400 22px/1.55 Georgia, serif; }
+mark { color: inherit; background: transparent; font-weight: 700; text-decoration: underline; text-decoration-color: rgba(47, 111, 237, 0.45); text-underline-offset: 4px; }
 
-#front {
-  border-top: 0;
-  font-size: 24px;
-  font-family: courier;
-  line-height: 1;
-  font-weight: bolder;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  position: relative;
-}
+.answer-panel { margin-top: 26px; padding-top: 24px; border-top: 1px solid var(--line); }
+.answer-primary { font-size: 23px; font-weight: 650; line-height: 1.45; }
+.answer-ipa { margin-top: 8px; color: var(--accent); font: 19px/1.4 Georgia, serif; }
+.answer-definition { margin-top: 14px; font: 19px/1.55 Georgia, serif; }
+.answer-row { display: grid; grid-template-columns: 86px 1fr; gap: 12px; margin-top: 18px; line-height: 1.55; }
+.answer-label { color: var(--muted); font-size: 13px; letter-spacing: 0.05em; }
+.encounter-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 22px; color: var(--muted); font-size: 13px; }
 
-.block {
-  display: inline-block;
-}
-
-.audio {
-  position: absolute;
-  width: 50%;
-  opacity: 0;
-}
-
-.soundLink {
-  width: 100%;
-}
-
-.hide {
-  display: none;
-}
-
-.phenic {
-  color: rgba(0, 0, 0, 0.6);
-  font-size: 19px;
-  padding-right: 24px;
-}
-
-#instance {
-  white-space: pre-wrap;
-}
-
-#instance u {
-  color: #008080;
-  text-decoration: none;
-}
-
-@keyframes bounceInUp {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 12px, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-.bounceInUp {
-  margin-top: 12px;
-  animation: bounceInUp 0.24s cubic-bezier(0.2, 0, 0, 1);
-}
-
-.chunk-head {
-  text-align: center;
-}
-
-.chunk-main {
-  display: inline-block;
-  max-width: 100%;
-  font-family: courier, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 25px;
-  font-weight: 800;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.chunk-example,
-.recall-cloze {
-  white-space: pre-wrap;
-  font-size: 20px;
-  line-height: 1.45;
-  text-wrap: pretty;
-}
-
-.chunk-meaning {
-  border-left: 4px solid rgba(0, 128, 128, 0.7);
-  color: rgba(0, 0, 0, 0.76);
-  font-weight: 700;
-  padding-left: 10px;
-}
-
-.source-example {
-  color: rgba(0, 0, 0, 0.82);
-  font-size: 20px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-}
-
-.chunk-answer .phrase-confirmation {
-  color: rgba(0, 0, 0, 0.72);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.chunk-answer .chunk-main {
-  font-size: 23px;
-}
-
-.word-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  line-height: 1.35;
-}
-
-.word-header-word {
-  color: rgba(0, 0, 0, 0.82);
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.word-header-ipa {
-  color: rgba(0, 0, 0, 0.56);
-  font-size: 18px;
-}
-
-.word-header-meaning {
-  color: rgba(0, 0, 0, 0.78);
-  font-size: 20px;
-}
-
-.english-definition {
-  color: rgba(0, 0, 0, 0.82);
-  font-size: 20px;
-  line-height: 1.45;
-}
-
-.chunk-recall-card {
-  padding-bottom: 4px;
-}
-
-.chunk-recall-card .items + .items {
-  border-top: 0;
-}
-
-.chunk-recall-card .recall-cloze {
-  color: rgba(0, 0, 0, 0.84);
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 1.45;
-  padding-bottom: 4px;
-}
-
-.chunk-recall-card .recall-hint {
-  margin-top: 0;
-  margin-bottom: 2px;
-  padding: 1px 0 4px;
-  border-left: 0;
-  background: transparent;
-  color: rgba(0, 0, 0, 0.5);
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.recall-blank {
-  display: inline-block;
-  min-width: 2.4em;
-  padding: 0 3px;
-  border-bottom: 0;
-  color: #007f7f;
-  font-weight: 800;
-  letter-spacing: 0;
-  line-height: 1.1;
-  text-align: center;
-}
-
-.chunk-recall-answer .recall-answer-head {
-  text-align: left;
-}
-
-.collocations-field {
-  line-height: 1.45;
-}
+.nightMode .card { --ink: rgba(255,255,255,.9); --muted: rgba(255,255,255,.55); --line: rgba(255,255,255,.14); --accent: #8eb2ff; background: #1f1f1f; }

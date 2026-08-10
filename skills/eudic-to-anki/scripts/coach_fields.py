@@ -1,21 +1,22 @@
-"""Shared helpers for TRVS-Lab coach JSON."""
+"""Shared field helpers for context-anchor vocabulary notes."""
 
 from __future__ import annotations
 
 import re
+import unicodedata
 
 _POS_LEAD_RE = re.compile(r"^[a-z]{1,12}\.", re.I)
 
-LEARNING_PRIORITY_VALUES = ("focus", "passive", "ignore")
-LEARNING_PRIORITY_MARKERS = {
-    "focus": "★",
-    "passive": "◇",
-    "ignore": "×",
-}
-TARGET_CHUNK_KEYS = ("target_chunk", "目标短语块")
-TARGET_CHUNK_MEANING_KEYS = ("target_chunk_meaning", "短语块锚点")
-TARGET_CHUNK_SENTENCE_KEYS = ("target_chunk_sentence", "短语块例句")
-TARGET_CHUNK_CLOZE_KEYS = ("target_chunk_cloze", "短语块挖空")
+LEARNING_GROUP_VALUES = ("learn", "defer", "skip", "reject")
+MANAGED_LEARNING_GROUPS = ("learn", "defer", "skip")
+SENTENCE_ORIGIN_VALUES = ("source", "adapted", "generated")
+
+CARD_SENTENCE_KEYS = ("card_sentence", "卡片例句", "example", "例句")
+SENTENCE_ORIGIN_KEYS = ("sentence_origin", "例句来源")
+SOURCE_CONTEXT_KEYS = ("source_context", "原始来源")
+SOURCE_CHUNK_KEYS = ("source_chunk", "来源词块")
+SOURCE_CHUNK_MEANING_KEYS = ("source_chunk_meaning", "词块释义")
+WORD_FAMILY_KEYS = ("word_family", "词族构词", "root", "词根")
 
 
 def first_text_field(note: dict, keys: tuple[str, ...]) -> str:
@@ -29,35 +30,33 @@ def first_text_field(note: dict, keys: tuple[str, ...]) -> str:
     return ""
 
 
+def normalize_word_key(value: object) -> str:
+    """Return the stable identity used for one-word-one-note matching."""
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    return re.sub(r"\s+", " ", text.strip()).casefold()
+
+
+def normalize_learning_group(value: object, *, default: str = "") -> str:
+    text = str(value or "").strip().lower()
+    return text or default
+
+
 def meaning_line_has_pos_prefix(line: str) -> bool:
     return bool(_POS_LEAD_RE.match(line.strip()))
 
 
 def fuse_pos_into_meaning(meaning_values: list[str], pos: str) -> list[str]:
-    """Prepend legacy `pos` to first meaning line when needed."""
+    """Prepend a legacy POS value to the first meaning line when useful."""
     pos_stripped = (pos or "").strip()
     if not pos_stripped or pos_stripped == "-":
         return list(meaning_values)
     fused: list[str] = []
-    for i, raw in enumerate(meaning_values):
+    for raw in meaning_values:
         line = raw.strip()
         if not line:
             continue
-        if i == 0 and not meaning_line_has_pos_prefix(line):
+        if not fused and not meaning_line_has_pos_prefix(line):
             fused.append(f"{pos_stripped} {line}".strip())
         else:
             fused.append(line)
-    if not fused:
-        return [pos_stripped] if pos_stripped else []
-    return fused
-
-
-def normalize_learning_priority(value: object, *, default: str = "") -> str:
-    text = str(value or "").strip().lower()
-    if not text:
-        return default
-    return text
-
-
-def learning_priority_marker(priority: str) -> str:
-    return LEARNING_PRIORITY_MARKERS.get(priority, "")
+    return fused or [pos_stripped]

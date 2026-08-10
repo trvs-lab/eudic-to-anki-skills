@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -11,107 +12,118 @@ SCRIPTS = ROOT / "skills" / "eudic-to-anki" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 spec = importlib.util.spec_from_file_location(
-    "ankiconnect_import",
-    SCRIPTS / "ankiconnect_import.py",
+    "ankiconnect_import", SCRIPTS / "ankiconnect_import.py"
 )
 assert spec is not None and spec.loader is not None
 ankiconnect_import = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ankiconnect_import)
 
 
-class AnkiconnectPhraseFieldTests(unittest.TestCase):
-    def test_build_trvs_lab_fields_maps_phrase_chunk_fields(self) -> None:
+def source_note(**overrides: object) -> dict[str, object]:
+    note: dict[str, object] = {
+        "word": "Inflict",
+        "pronunciation": "/ɪnˈflɪkt/",
+        "meaning": ["vt. 使遭受；造成"],
+        "english_definition": "to make someone suffer something unpleasant",
+        "word_family": "in-（向内）+ flict（打击）",
+        "source_context": "The storm inflicted serious damage on the town.",
+        "card_sentence": "The storm inflicted serious damage on the town.",
+        "sentence_origin": "source",
+        "source_chunk": "inflicted serious damage on",
+        "source_chunk_meaning": "给……造成严重破坏",
+        "learning_group": "learn",
+        "category_id": "book-1",
+        "add_time_utc": "2026-08-10T01:00:00Z",
+    }
+    note.update(overrides)
+    return note
+
+
+class ContextAnchorFieldTests(unittest.TestCase):
+    def test_build_fields_maps_context_anchor_contract(self) -> None:
         fields = ankiconnect_import.build_trvs_lab_fields(
-            {
-                "word": "inflict",
-                "pronunciation": "/ɪnˈflɪkt/",
-                "part_of_speech": "vt.",
-                "meaning": ["造成；使承受"],
-                "english_definition": "to make someone suffer harm, pain, or damage",
-                "root": "in-（进入）+ flict（打击）",
-                "example": "The storm inflicted serious damage on the town.",
-                "collocations": ["inflict pain on", "inflict punishment on"],
-                "target_chunk": "inflict damage on",
-                "target_chunk_meaning": "造成严重伤害",
-                "target_chunk_sentence": "The storm can inflict damage on a town.",
-                "target_chunk_cloze": "The storm can ____ a town.",
-                "learning_priority": "focus",
-            },
+            source_note(), "[sound:inflict.mp3]"
+        )
+        self.assertEqual(fields["单词"], "Inflict")
+        self.assertEqual(fields["规范词形"], "inflict")
+        self.assertEqual(
+            fields["卡片例句"], "The storm inflicted serious damage on the town."
+        )
+        self.assertEqual(fields["例句来源"], "source")
+        self.assertEqual(fields["来源词块"], "inflicted serious damage on")
+        self.assertEqual(fields["词族构词"], "in-（向内）+ flict（打击）")
+        self.assertEqual(fields["学习分组"], "learn")
+        self.assertEqual(json.loads(fields["遇见记录"])[0]["origin"], "source")
+
+    def test_generated_sentence_is_a_real_encounter_but_not_history(self) -> None:
+        first = ankiconnect_import.build_trvs_lab_fields(
+            source_note(), "[sound:inflict.mp3]"
+        )
+        second = ankiconnect_import.build_trvs_lab_fields(
+            source_note(
+                source_context="",
+                card_sentence="Criticism can inflict lasting harm on a young child.",
+                sentence_origin="generated",
+                add_time_utc="2026-08-11T01:00:00Z",
+            ),
+            "[sound:inflict.mp3]",
+            existing_fields=first,
+        )
+        self.assertEqual(second["遇见次数"], "2")
+        self.assertIn("The storm inflicted serious damage", second["历史语境"])
+        self.assertNotIn("Criticism can inflict", second["历史语境"])
+
+    def test_idempotent_encounter_does_not_change_fields(self) -> None:
+        first = ankiconnect_import.build_trvs_lab_fields(
+            source_note(), "[sound:inflict.mp3]"
+        )
+        repeated = ankiconnect_import.build_trvs_lab_fields(
+            source_note(), "[sound:other.mp3]", existing_fields=first
+        )
+        self.assertEqual(repeated, first)
+
+    def test_older_backfill_counts_but_does_not_replace_latest_card(self) -> None:
+        latest = ankiconnect_import.build_trvs_lab_fields(
+            source_note(
+                source_context="The flood inflicted more damage on local farms.",
+                card_sentence="The flood inflicted more damage on local farms.",
+                add_time_utc="2026-08-11T01:00:00Z",
+            ),
             "[sound:inflict.mp3]",
         )
-        self.assertEqual(fields["目标短语块"], "inflict damage on")
-        self.assertEqual(fields["短语块锚点"], "造成严重伤害")
-        self.assertEqual(fields["短语块例句"], "The storm can inflict damage on a town.")
-        self.assertEqual(fields["短语块挖空"], "The storm can ____ a town.")
-        self.assertEqual(fields["发音"], "[sound:inflict.mp3]")
+        backfilled = ankiconnect_import.build_trvs_lab_fields(
+            source_note(add_time_utc="2026-08-09T01:00:00Z"),
+            "[sound:inflict.mp3]",
+            existing_fields=latest,
+        )
+        self.assertEqual(
+            backfilled["卡片例句"],
+            "The flood inflicted more damage on local farms.",
+        )
+        self.assertEqual(backfilled["最近遇见"], "2026-08-11T01:00:00Z")
+        self.assertEqual(backfilled["遇见次数"], "2")
+        self.assertIn("The storm inflicted serious damage", backfilled["历史语境"])
 
-    def test_build_trvs_lab_fields_maps_chinese_phrase_chunk_aliases(self) -> None:
+    def test_required_fields_do_not_require_optional_word_family_or_chunk(self) -> None:
         fields = ankiconnect_import.build_trvs_lab_fields(
-            {
-                "单词": "inflict",
-                "音标": "/ɪnˈflɪkt/",
-                "词性": "vt.",
-                "释义": ["造成；使承受"],
-                "英英": "to make someone suffer harm, pain, or damage",
-                "词根": "in-（进入）+ flict（打击）",
-                "例句": "The storm inflicted serious damage on the town.",
-                "常用搭配": ["inflict pain on", "inflict punishment on"],
-                "目标短语块": "inflict damage on",
-                "短语块锚点": "造成严重伤害",
-                "短语块例句": "The storm can inflict damage on a town.",
-                "短语块挖空": "The storm can ____ a town.",
-                "learning_priority": "focus",
-            },
-            "",
+            source_note(word_family="", source_chunk="", source_chunk_meaning=""), ""
         )
-        self.assertEqual(fields["目标短语块"], "inflict damage on")
-        self.assertEqual(fields["短语块锚点"], "造成严重伤害")
-        self.assertEqual(fields["短语块例句"], "The storm can inflict damage on a town.")
-        self.assertEqual(fields["短语块挖空"], "The storm can ____ a town.")
+        self.assertEqual(
+            ankiconnect_import._missing_required_field_names(
+                fields, require_audio=False
+            ),
+            [],
+        )
 
-    def test_required_payload_fields_include_phrase_anchor_fields(self) -> None:
-        fields = {
-            "单词": "inflict",
-            "音标": "/ɪnˈflɪkt/",
-            "释义": "vt. 造成；使承受",
-            "英英": "to make someone suffer harm, pain, or damage",
-            "词根": "in-（进入）+ flict（打击）",
-            "例句": "The storm inflicted serious damage on the town.",
-            "常用搭配": "inflict pain on<br>inflict punishment on",
-            "目标短语块": "",
-            "短语块锚点": "造成严重伤害",
-            "短语块例句": "",
-            "短语块挖空": "The storm can ____ a town.",
-            "学习标记": "★",
-        }
-        missing = ankiconnect_import._missing_required_field_names(
-            fields,
-            require_audio=False,
-        )
-        self.assertIn("目标短语块", missing)
-        self.assertIn("短语块例句", missing)
-
-    def test_required_payload_fields_allow_empty_source_example(self) -> None:
-        fields = {
-            "单词": "inflict",
-            "音标": "/ɪnˈflɪkt/",
-            "释义": "vt. 造成；使承受",
-            "英英": "to make someone suffer harm, pain, or damage",
-            "词根": "in-（进入）+ flict（打击）",
-            "例句": "",
-            "常用搭配": "inflict pain on<br>inflict punishment on",
-            "目标短语块": "inflict damage on",
-            "短语块锚点": "造成严重伤害",
-            "短语块例句": "The storm can inflict damage on a town.",
-            "短语块挖空": "The storm can ____ a town.",
-            "学习标记": "★",
-        }
-        missing = ankiconnect_import._missing_required_field_names(
-            fields,
-            require_audio=False,
-        )
-        self.assertNotIn("例句", missing)
-        self.assertEqual(missing, [])
+    def test_malformed_existing_encounter_log_stops_instead_of_losing_history(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(ValueError, "遇见记录 is not valid JSON"):
+            ankiconnect_import.build_trvs_lab_fields(
+                source_note(add_time_utc="2026-08-12T01:00:00Z"),
+                "[sound:inflict.mp3]",
+                existing_fields={"遇见记录": "not-json", "遇见次数": "4"},
+            )
 
 
 if __name__ == "__main__":

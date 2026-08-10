@@ -1,192 +1,53 @@
-# TRVS-Lab Coach JSON Prompt (Unified)
+# Context Anchor Coach JSON Prompt
 
-生成 JSON 顶层对象：`{"notes":[...]}`，每个 note 必须包含：
+只输出 `{"notes":[...]}` JSON，不输出 Markdown 或说明。
 
-- `word`
-- `pronunciation` (完整美式 IPA，形如 `/spraɪts/`)
-- `part_of_speech` (string, 例如 `n.` / `vt.` / `vi.` / `adj.` / `adv.`)
-- `meaning` (non-empty array)
-- `english_definition` (non-empty, 简洁解释型英英释义)
-- `root`
-- `example` (string，来源例句；没有真实来源时为空字符串)
-- `collocations` (non-empty array)
-- `audio_html` (string, 可以为空)
-- `learning_priority` (string, 只能是 `focus` / `passive` / `ignore`)
-- `target_chunk` (string, 必填，主短语块锚点)
-- `target_chunk_meaning` (string, 必填，短语块中文锚点)
-- `target_chunk_sentence` (string, 必填，短语块学习例句，必须逐字包含 `target_chunk`)
-- `target_chunk_cloze` (string, `focus` 必填；`passive` / `ignore` 必须为空字符串)
+每个导出 encounter 对应一条 coach note。同一单词有多条不同来源时，应分别处理各自的 `source_context`；不得只写一条改写句再套用到所有来源。
 
-输入的 partial note 可能还带有 `source_context`，这是欧路导出的真实生词来源句。它不是 Anki 必填字段，但必须用于判断 `example`。
+## 可导入字段
 
-## 输出规则
+每条 note 包含：
 
-- 不要输出 markdown fence 或说明文字，只输出 JSON。
-- 大批量建议 25-40 词一批。
-- 仅当信道噪声明显时，允许子 agent 输出一行 base64（父 agent 解码）。
-- 导入前必须通过 `scripts/validate_trvs_coach_json.py`。
-- 不要直接复制欧路 `exp` 到 `meaning`，也不要批量复制欧路 `phon` 作为最终音标。
+- `word`: 完整单词或短语
+- `pronunciation`: 完整美式 IPA，使用 `/.../`
+- `part_of_speech`: `n.`、`vt.`、`vi.`、`adj.`、`adv.`、`phr.` 等
+- `meaning`: 非空数组；每项以词性开头，给出当前语境中的简短中文义
+- `english_definition`: 4–32 词的自然、解释型英英释义
+- `word_family`: 可选；只写真正有帮助的词族或构词提示，不使用 `-` 或 `无`
+- `source_context`: 欧路原始来源句；原样保留，没有时为空
+- `card_sentence`: 卡片正面例句
+- `sentence_origin`: `source`、`adapted`、`generated` 之一
+- `source_chunk`: 可选；最多一条，必须出现在 `card_sentence` 中
+- `source_chunk_meaning`: 与 `source_chunk` 同时出现的简短中文义
+- `learning_group`: `learn`、`defer`、`skip`、`reject` 之一
+- `audio_html`: 可为空，由导入器生成
+- 欧路元数据：`category_id`、`category_name`、`add_time_utc`、`add_time_local`、`source`、`tags`
 
-## 字段规则
+## 例句决策
 
-`pronunciation`
+1. 来源句完整、自然、长度合适：轻度清理 HTML 或多余空白，使用 `source`。
+2. 来源句过长、含噪、被截断或背景过重：做最小删减或改写，使用 `adapted`。保留原义、事实、目标词义和语气，不虚构新情节。
+3. 没有来源句：生成实用例句，使用 `generated`。默认 8–16 个英文词，包含目标词或有效词形，使用常见、高迁移义项，避免专名和额外难词。
 
-- 必须填写完整美式 IPA，并用 `/.../` 包裹。
-- 不能空；不确定时查清楚再输出，不能用占位符。
+`source_context` 永远保存原始输入。生成句不得伪装为真实来源，也不得进入历史语境。
 
-`part_of_speech` 和 `meaning`
+## 分类
 
-- `part_of_speech` 不能为空，必须是简短词性缩写，例如 `n.`、`vt.`、`vi.`、`adj.`、`adv.`、`phr.`。
-- `meaning` 数组中的每一条中文释义都必须以词性缩写开头，例如 `n. 顿悟`、`vt. 推迟`、`adj. 明显的`。
-- 中文释义必须由你重新生成，写成简洁、通俗、一眼懂的词典式中文标签。
-- 不要把概念解释、成分说明、百科定义写进 `meaning`；这类内容放进 `english_definition`。
-- 避免生硬术语或不自然直译；优先选学习者看到就懂的中文。
+- `learn`: 高频、多义、搭配丰富、容易误用、对听说读写有高迁移价值，或属于长期工作／兴趣核心词汇。
+- `defer`: 有识别价值，但当前主动掌握收益较低。拿不准时使用此组。
+- `skip`: 完整有效，但学习收益很低；仍导入 Anki，由用户人工删除或移动。
+- `reject`: 单字母误截、乱码、残缺片段等无效输入；不导入。
 
-中文释义正例：
+不要按词性或“难不难”机械分类。多义词按最有迁移价值的常见义项判断。
 
-- `carbon dioxide` -> `"meaning": ["n. 二氧化碳"]`
-- `sprites` -> `"meaning": ["n. 游戏里的小图；角色图"]`
-- `interconnect` -> `"meaning": ["v. 连在一起；互相关联"]`
-- `generic` -> `"meaning": ["adj. 普通的；没特色的"]`
-- `imagery` -> `"meaning": ["n. 画面感；图像"]`
-- `primitives` -> `"meaning": ["n. 基础元素；基本构件"]`
+## 内容标准
 
-中文释义反例（禁止）：
+- 不复制欧路 `exp` 作为中文释义，也不批量复制欧路 `phon` 作为最终 IPA。
+- 中文释义使用一眼能懂的词典式标签，不写百科解释。
+- 英英释义使用日常英文讲清楚含义，不只列同义词，不混入中文。
+- `source_chunk` 只从 `source` 或 `adapted` 例句提取；生成例句留空。
+- `word_family` 没有明确帮助时留空，不强行拆词。
+- 完整 `skip` 条目仍满足所有内容标准。
+- `reject` 可以只保留用于诊断的原始内容，不需要补齐学习字段。
 
-- `"meaning": ["由一个碳原子和两个氧原子组成的气体"]`
-- `"meaning": ["n. 由一个碳原子和两个氧原子组成的气体"]`
-- `"meaning": ["精灵图"]`
-- `"meaning": ["互相连接"]`
-- `"meaning": ["n. 顿悟", "突然明白的时刻"]`
-
-`english_definition`
-
-- 必须生成，不能空。
-- 风格接近 vocabulary.com：简洁、通俗、解释型，像在给学习者讲清楚这个词。
-- 用日常英文解释词义，不要只给同义词，也不要写成硬邦邦的词典片段。
-- 通常写 1 个短句或短语，约 6-25 个英文词；可以点出常见使用场景。
-- 不要混入中文，不要复制机器翻译，不要写长篇百科定义。
-
-英英释义正例：
-
-- `carbon dioxide` -> `"english_definition": "a gas that people breathe out and plants use to grow"`
-- `sprites` -> `"english_definition": "small images or characters used in a game or animation"`
-- `interconnect` -> `"english_definition": "to connect things so they work together as one system"`
-
-英英释义反例（禁止）：
-
-- `"english_definition": ""`
-- `"english_definition": "connect; link"`
-- `"english_definition": "互相连接"`
-- `"english_definition": "a thing"`
-
-`learning_priority`
-
-总目标：分级服务于外语学习者的真实听说读写流畅度，同时兼顾 20000 词汇量和 IELTS 8+。判断时不要只问“这个词难不难”，先问它是否帮助用户更流畅地理解或表达真实内容。
-
-判断漏斗：
-
-1. 这个词是否能提升听、说、读、写任一能力的真实表现？
-2. 用户是否需要在未来 6-12 个月主动说出/写出它，还是只需要读到/听到时认得？
-3. 它是否是噪声、专名、一次性虚构词、误导出片段，或学习成本明显高于收益？
-
-- `focus`：主动掌握词。能提升口语/写作表达精度，或显著提升阅读/听力理解；B2-C2 高迁移词、IELTS 学术/议论文/观点表达词、抽象概念词、常用动词/形容词/副词、地道搭配、用户工作和长期兴趣中会反复用到的词。
-- 多义词按最高迁移价值的常见义项判断：如果一个词既有具体物件义，也有常见抽象义、动词义、评论/修辞义或高价值搭配，并且这些义项能提升表达精度或阅读理解，就应按高价值义项标为 `focus`。例如 `foil` 有“箔”的物件义，但也有 `vt. 挫败`、`n. 衬托人物/事物`，应标为 `focus`；`carbon dioxide` 这类稳定具体概念词通常仍为 `passive`。
-- 不要按词性直接分级。名词、动词、形容词、副词都可能是 `focus` 或 `passive`；最终只看它是否提升真实听说读写流畅度，以及是否值得主动输出。
-- 核心常用词优先：如果一个词虽然不高级，但高频、多义、搭配丰富、容易误用，或能构成常见短语/表达，应标为 `focus`，因为它对真实流畅度的贡献高于许多低频难词。
-- `passive`：识别掌握词。读到/听到时有价值，但不值得强求主动输出；偏文学描写、具体物件/工具/形状/材料、低频专业词、派生/变形词、领域词但不是用户长期表达核心的词。
-- `ignore`：不纳入复习负担。对听说读写流畅度几乎没有实际增益；专名、乱码/截断/误导出片段、一次性虚构术语、极冷门术语、低价值缩写、明显不值得做词汇卡的内容。
-
-拿不准时默认 `passive`，不要默认 `focus`。只有明确无助于真实语言能力或明显是噪声时才用 `ignore`。
-
-`target_chunk`
-
-- 每个 note 必填。
-- 优先写真实、自然、可复用的短语块或搭配，如 `inflict damage on`、`go berserk`、`a look of revulsion`。
-- 对具体物件、专名、低输出词，允许写最小语境框架，如 `a sphinx`、`the crook of his arm`。
-- 只有确实没有自然词块时才退回单词本身；不要默认把 `target_chunk` 写成 `word`。
-
-`target_chunk_meaning`
-
-- 每个 note 必填。
-- 写短语块级中文锚点，不写单词级词典释义。
-- 正例：`造成严重伤害`、`突然失控`、`厌恶的表情`。
-- 反例：`vt. 造成；使承受`、`一种表示造成伤害的动词短语`。
-
-`target_chunk_sentence`
-
-- 每个 note 必填。
-- 这是卡片正面使用的学习句，不是来源例句。
-- 必须逐字包含 `target_chunk`；不要让标题学一个短语、句子练另一个短语。
-- 优先由 `word + source_context` 派生一个短、自然、干净的学习句；可以改写，不必逐字忠于原文。
-- 通常 6-14 个英文词，避免专名、复杂背景和额外难词。
-- 正例：`His quick reflexes helped him react in time.`
-- 反例：`Harry was ready, his Quidditch reflexes taking over.`（如果 `target_chunk` 是 `quick reflexes`，这句不包含目标短语块）
-
-`target_chunk_cloze`
-
-- `focus` note 必填，`passive` 和 `ignore` 必须写空字符串。
-- 必须由 `target_chunk_sentence` 挖掉 `target_chunk` 得到，并包含明显空格，如 `____`。
-- 正例：`target_chunk_sentence = "The storm can inflict damage on a town."` 时，`target_chunk_cloze = "The storm can ____ a town."`
-- 反例：`____ damage on`、`inflict damage on`。
-
-`example`
-
-- `example` 只表示真实来源例句，用于锚点卡背面出处/语境。
-- 有 `source_context` 时，清理 HTML 和明显噪声；若太长、截断或不自然，可以轻微完善，但必须保留真实来源语境。
-- 没有真实 `source_context` 时，`example` 写空字符串；不要为了填字段伪造来源例句。
-- 学习用例句写入 `target_chunk_sentence`，不要塞进 `example`。
-
-`collocations`
-
-- 至少 2 条常见搭配，通常 2-4 条。
-- 选择真实、常见、有助于记忆和使用的搭配；不要空数组。
-
-`root`
-
-`root` 只能是以下两种之一：
-
-1. `-` 或 `无`（不可合理拆解，或拆解不具学习价值；优先用 `-`）
-2. 形如：`形式（中文义）+ 形式（中文义）+ ...`
-
-约束：
-
-- 必须使用全角中文括号 `（ ）`，不要用英文括号 `()`
-- 每个分段都必须带中文义，不允许只写英文解释
-- 不要写词源故事，不要写语法说明句
-- 不要写 `past participle / suffix / prefix / form with -ed` 这类英文说明句
-- 不要把完整单词本身当作唯一“词根”分段；如果只能写出 `crimson（深红）` 这种整词翻译，说明没有可用拆解，应写 `-`
-- 不要整批都写 `-`；只有确实不适合拆解的词才写 `-`
-
-正例：
-
-- `de-（离开）+ part（分开）`
-- `trans-（跨越）+ port（运送）`
-- `inter-（相互）+ connect（连接）`
-- `-`
-
-反例（禁止）：
-
-- `Past-participle form with -ed.`
-- `prefix de- + part`
-- `de- (away) + part (part)`
-- `crimson（深红）`
-
-## 输出前自检（必须）
-
-在输出该批 JSON 前，逐词检查：
-
-- `word` 是否像真实单词/短语；单字母误选（如 `p`）必须剔除或交回父 agent 复核
-- `pronunciation` 是否完整且非空
-- `part_of_speech` 是否存在且非空
-- `meaning` 是否为非空数组，每一条是否带词性缩写，且中文是否简洁自然
-- `english_definition` 是否非空
-- `root` 是否满足上面的两种合法格式之一，是否没有把完整单词本身当作唯一分段，且没有整批偷懒写 `-`
-- `example` 是否只在有真实来源时填写；无来源时是否保持空字符串
-- `collocations` 是否至少 2 条常见搭配
-- `audio_html` 可以在导入前为空，但最终 Anki 的 `发音` 字段必须由导入脚本生成 `[sound:...]`
-- `learning_priority` 是否存在，且只使用 `focus` / `passive` / `ignore`
-- `target_chunk` 和 `target_chunk_meaning` 是否存在，且是短语块级锚点
-- `target_chunk_sentence` 是否存在、自然，并逐字包含 `target_chunk`
-- `focus` note 是否有由 `target_chunk_sentence` 挖掉 `target_chunk` 得到的 `target_chunk_cloze`；`passive` / `ignore` note 是否把 `target_chunk_cloze` 留空
-- 若不合法，立即改写后再输出
+输出后必须运行 `scripts/validate_trvs_coach_json.py`。

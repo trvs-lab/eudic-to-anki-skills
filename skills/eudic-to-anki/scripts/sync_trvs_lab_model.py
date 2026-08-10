@@ -14,6 +14,7 @@ from ankiconnect_import import (
     STRUCTURED_VOCAB_MODEL,
     AnkiConnectClient,
     AnkiImportError,
+    assert_model_migration_safe,
     load_model_spec,
 )
 
@@ -21,9 +22,8 @@ from ankiconnect_import import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Update the fresh-start TRVS-Lab Anki note type with bundled phrase chunk "
-            "fields, card templates, and styling. This version is not compatible with "
-            "old TRVS-Lab notes that lack phrase chunk fields."
+            "Create or update the one-card TRVS-Lab Context Anchor note type. "
+            "Legacy Chunk Anchor/Chunk Recall models require backup and reimport."
         )
     )
     parser.add_argument(
@@ -81,7 +81,9 @@ def build_template_payload(spec: dict[str, Any]) -> dict[str, dict[str, str]]:
             )
         templates[str(name)] = {"Front": str(front), "Back": str(back)}
     if not templates:
-        raise AnkiImportError("Model spec does not contain any expanded card templates.")
+        raise AnkiImportError(
+            "Model spec does not contain any expanded card templates."
+        )
     return templates
 
 
@@ -96,7 +98,9 @@ def describe_plan(
     print(f"Model: {model_name}")
     print(f"Fields in bundled spec: {', '.join(spec.get('fields', []))}")
     if sync_templates:
-        names = [str(template.get("Name", "")) for template in spec.get("card_templates", [])]
+        names = [
+            str(template.get("Name", "")) for template in spec.get("card_templates", [])
+        ]
         print(f"Templates to sync: {', '.join(name for name in names if name)}")
     else:
         print("Templates to sync: skipped")
@@ -114,14 +118,18 @@ def create_model(client: AnkiConnectClient, spec: dict[str, Any]) -> None:
     )
 
 
-def sync_model_templates(client: AnkiConnectClient, model_name: str, spec: dict[str, Any]) -> None:
+def sync_model_templates(
+    client: AnkiConnectClient, model_name: str, spec: dict[str, Any]
+) -> None:
     client.invoke(
         "updateModelTemplates",
         model={"name": model_name, "templates": build_template_payload(spec)},
     )
 
 
-def sync_model_styling(client: AnkiConnectClient, model_name: str, spec: dict[str, Any]) -> None:
+def sync_model_styling(
+    client: AnkiConnectClient, model_name: str, spec: dict[str, Any]
+) -> None:
     css = spec.get("css")
     if css is None:
         raise AnkiImportError("Model spec does not contain expanded CSS.")
@@ -146,7 +154,10 @@ def ensure_model_fields(
 def main() -> int:
     args = parse_args()
     if args.templates_only and args.css_only:
-        print("Error: --templates-only and --css-only cannot be used together.", file=sys.stderr)
+        print(
+            "Error: --templates-only and --css-only cannot be used together.",
+            file=sys.stderr,
+        )
         return 2
 
     sync_templates = not args.css_only
@@ -178,6 +189,7 @@ def main() -> int:
             create_model(client, spec)
             print(f"Created Anki note type '{args.model}' from bundled spec.")
         else:
+            assert_model_migration_safe(client, args.model)
             ensure_model_fields(client, args.model, list(spec.get("fields", [])))
             if sync_templates:
                 sync_model_templates(client, args.model, spec)
