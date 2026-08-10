@@ -108,6 +108,13 @@ class ValidateContextAnchorTests(unittest.TestCase):
             "generated card_sentence should contain 8-16 words", too_short.stderr
         )
 
+    def test_english_definition_uses_compact_six_to_eighteen_word_range(self) -> None:
+        too_short = self.run_validator(
+            valid_note(english_definition="to cause serious lasting harm")
+        )
+        self.assertEqual(too_short.returncode, 1)
+        self.assertIn("should contain 6-18 words", too_short.stderr)
+
     def test_source_chunk_is_optional_but_must_be_traceable(self) -> None:
         omitted = self.run_validator(
             valid_note(source_chunk="", source_chunk_meaning="")

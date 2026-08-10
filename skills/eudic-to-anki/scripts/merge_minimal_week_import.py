@@ -9,7 +9,11 @@ import importlib.util
 import json
 from pathlib import Path
 
-from coach_fields import fuse_pos_into_meaning, normalize_word_key
+from coach_fields import (
+    fuse_pos_into_meaning,
+    normalize_string_list,
+    normalize_word_key,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -22,13 +26,6 @@ def _load_build_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-
-def _list(value: object) -> list[str]:
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value or "").strip()
-    return [text] if text else []
 
 
 def main() -> int:
@@ -65,7 +62,9 @@ def main() -> int:
                     "pronunciation": str(coach.get("pronunciation") or "")
                     or build.clean_eudic_phon(str(row.get("phon") or ""), word=word),
                     "part_of_speech": pos,
-                    "meaning": fuse_pos_into_meaning(_list(coach.get("meaning")), pos),
+                    "meaning": fuse_pos_into_meaning(
+                        normalize_string_list(coach.get("meaning")), pos
+                    ),
                     "english_definition": coach.get("english_definition", ""),
                     "word_family": coach.get("word_family", ""),
                     "card_sentence": coach.get("card_sentence", ""),

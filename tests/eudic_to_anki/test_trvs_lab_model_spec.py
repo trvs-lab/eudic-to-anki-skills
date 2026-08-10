@@ -50,6 +50,10 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("{{卡片例句}}", front)
         self.assertIn("{{发音}}", front)
         self.assertIn("playAudio", front)
+        self.assertIn("document.createTreeWalker", front)
+        self.assertIn('"take": "took taken taking takes"', front)
+        self.assertIn('base.slice(0, -1) + "ing"', front)
+        self.assertNotIn("innerHTML =", front)
         for hidden_field in (
             "音标",
             "语境释义",
@@ -85,6 +89,8 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertNotIn("{{学习分组}}", back)
         self.assertNotIn("priority-marker", back)
         self.assertNotIn("Chunk Recall", back)
+        self.assertIn('id="latest-encounter"', back)
+        self.assertIn("latest.textContent = match[0]", back)
 
     def test_model_referenced_assets_exist(self) -> None:
         for template in self.spec["card_templates"]:

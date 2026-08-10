@@ -35,6 +35,16 @@
 
   <div class="encounter-meta">
     <span>遇见 {{遇见次数}} 次</span>
-    <span>最近遇见 {{最近遇见}}</span>
+    <span>最近遇见 <time id="latest-encounter">{{最近遇见}}</time></span>
   </div>
 </section>
+
+<script>
+(function () {
+  var latest = document.getElementById("latest-encounter");
+  if (!latest) return;
+  var value = latest.textContent.trim();
+  var match = value.match(/^\d{4}-\d{2}-\d{2}/);
+  if (match) latest.textContent = match[0];
+})();
+</script>

@@ -35,6 +35,11 @@ class FakeClient:
                     "fields": {
                         "单词": {"value": "inflict"},
                         "规范词形": {"value": "inflict"},
+                        "音标": {"value": "/ɪnˈflɪkt/"},
+                        "语境释义": {"value": "vt. 使遭受；造成"},
+                        "英英": {
+                            "value": "to make someone suffer something unpleasant"
+                        },
                         "卡片例句": {"value": "The storm inflicted damage."},
                         "例句来源": {"value": "source"},
                         "原始来源": {"value": "The storm inflicted damage."},
@@ -149,6 +154,30 @@ class ContextAnchorImportTests(unittest.TestCase):
         }
         self.assertEqual(summary["idempotent"], 1)
         self.assertFalse(any(action in mutations for action, _ in client.calls))
+
+    def test_exact_reimport_repairs_invalid_audio_without_resetting_card(self) -> None:
+        client = FakeClient(group="defer")
+        repeated = note(
+            timestamp="2026-08-09T01:00:00Z",
+            raw="The storm inflicted damage.",
+        )
+        repeated["encounter_id"] = "old"
+        repeated["audio_html"] = "[sound:inflict-repaired.mp3]"
+        repeated["_repair_audio"] = True
+        summary = ankiconnect_import.upsert_context_anchor_notes(
+            client, [repeated], base_deck="words", model="TRVS-Lab"
+        )
+        actions = [action for action, _ in client.calls]
+        update = next(
+            params for action, params in client.calls if action == "updateNote"
+        )
+        self.assertEqual(summary["updated"], 1)
+        self.assertEqual(summary["reset"], 0)
+        self.assertEqual(
+            update["note"]["fields"]["发音"], "[sound:inflict-repaired.mp3]"
+        )
+        self.assertNotIn("forgetCards", actions)
+        self.assertNotIn("changeDeck", actions)
 
 
 if __name__ == "__main__":

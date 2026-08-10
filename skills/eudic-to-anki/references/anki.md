@@ -4,9 +4,9 @@
 
 - 连通性：`python3 scripts/ankiconnect_import.py --ping`
 - 新建模型：`python3 scripts/sync_trvs_lab_model.py --create-if-missing`
-- 预演：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run`
+- 预演：`python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/import.json --deck words --create-deck --dry-run`
 
-`TRVS-Lab` 只有一个 `Context Anchor` 模板。正面只显示单词和卡片例句，点击单词播放 `发音`；背面按重要性顺序直接显示语境释义、音标、英英、可选来源词块、可选词族构词、历史语境、遇见次数和最近遇见，不显示分类。
+`TRVS-Lab` 只有一个 `Context Anchor` 模板。正面只显示单词和卡片例句，点击单词播放 `发音`；背面按重要性顺序直接显示语境释义、音标、英英、可选来源词块及释义、可选词族构词、由近到远的历史语境、遇见次数和本地日期，不显示分类。
 
 受管 deck 为 `words::learn`、`words::defer`、`words::skip`。Anki 中当前受管 deck 是下次导入的人工决定来源。新的独立遇见会更新同一 note 并重置单卡；相同遇见 ID 幂等。
 

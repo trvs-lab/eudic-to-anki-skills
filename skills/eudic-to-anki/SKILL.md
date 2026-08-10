@@ -36,9 +36,9 @@ Execute the complete pipeline. Treat this directory as the working directory.
 6. Validate:
    `python3 scripts/validate_trvs_coach_json.py <ABS_TEMP_DIR>/_day_<D>_import.json`
 7. Preview:
-   `python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/_day_<D>_import.json --deck words --create-deck --dia-upsert --verify-required-fields --dry-run`
+   `python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/_day_<D>_import.json --deck words --create-deck --dry-run`
 8. Import with required audio:
-   `python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/_day_<D>_import.json --deck words --create-deck --dia-upsert --require-audio --verify-required-fields --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text "{word}" --output "{output}" --voice "{voice}"'`
+   `python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/_day_<D>_import.json --deck words --create-deck --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text "{word}" --output "{output}" --voice "{voice}"'`
 9. After success, run `bash scripts/cleanup_import_artifacts.sh`.
 
 Run rule-covered commands directly. Do not wrap them in a login shell or join them with shell operators.
@@ -62,15 +62,15 @@ Run rule-covered commands directly. Do not wrap them in a login shell or join th
 - `skip`: a complete word or phrase kept in Anki for manual deletion or movement. A later import does not override this deck.
 - `reject`: an invalid fragment or garbage entry; never import it.
 
-When a card is already in one of the three managed decks, its current Anki deck is authoritative. A distinct encounter updates the same note and resets its single card to new. An identical encounter ID changes nothing and does not reset progress.
+When a card is already in one of the three managed decks, its current Anki deck is authoritative. A distinct encounter updates the same note and resets its single card to new. An identical encounter ID changes nothing and does not reset progress; if its stored audio is missing or invalid, repair only the audio and still do not reset the card.
 
 ## Audio hard gate
 
 - Use Microsoft Edge online TTS through `edge-tts`; the default voice is `en-US-GuyNeural`.
-- Probe the same provider and voice before import. For a transient failure, retry exactly once with identical arguments.
+- When any note still needs generated audio, probe the same provider and voice before generation. If every required sound is already valid in Anki, reuse it without calling Edge-TTS. For a transient failure, retry exactly once with identical arguments.
 - If the second attempt fails or the MP3 is missing, empty, or invalid, stop the whole import and report the service, word, voice, attempts, and reason.
 - Do not use macOS `say`, system/browser TTS, another provider, another voice, or any synthesized fallback.
-- Generate and validate all local audio before changing any Anki note/card or syncing. Existing valid `[sound:...]` values and explicit valid local MP3 files may be reused.
+- Generate and validate all local audio before changing any Anki note/card or syncing. Verify existing `[sound:...]` media through AnkiConnect before reuse; explicit valid local MP3 files may also be reused. Every new or changed note must have valid audio—this is unconditional, not a CLI option.
 
 ## Model migration
 

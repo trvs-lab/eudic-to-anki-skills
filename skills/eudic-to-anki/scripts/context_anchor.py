@@ -19,28 +19,12 @@ from coach_fields import (
     first_text_field,
     fuse_pos_into_meaning,
     normalize_learning_group,
+    normalize_optional_text,
+    normalize_string_list,
     normalize_word_key,
 )
 
 HISTORY_LIMIT = 3
-
-
-def normalize_text(value: Any) -> str:
-    if value is None:
-        return ""
-    text = str(value).strip()
-    return "" if text == "-" else text
-
-
-def normalize_list(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value).strip()
-    if not text:
-        return []
-    return [part.strip() for part in text.split("|") if part.strip()]
 
 
 def note_learning_group(note: dict[str, Any], *, default: str = "") -> str:
@@ -65,15 +49,15 @@ def _normalized_identity_text(value: Any) -> str:
 
 
 def encounter_id(note: dict[str, Any]) -> str:
-    explicit = normalize_text(note.get("encounter_id"))
+    explicit = normalize_optional_text(note.get("encounter_id"))
     if explicit:
         return explicit
     identity = {
-        "category": normalize_text(
+        "category": normalize_optional_text(
             note.get("category_id") or note.get("category_name")
         ),
         "word": normalize_word_key(note.get("word") or note.get("单词")),
-        "time": normalize_text(
+        "time": normalize_optional_text(
             note.get("add_time_utc")
             or note.get("add_time_local")
             or note.get("encountered_at")
@@ -87,12 +71,16 @@ def encounter_id(note: dict[str, Any]) -> str:
 
 
 def encounter_from_note(note: dict[str, Any]) -> dict[str, str]:
+    utc_or_local = normalize_optional_text(
+        note.get("add_time_utc")
+        or note.get("add_time_local")
+        or note.get("encountered_at")
+    )
     return {
         "id": encounter_id(note),
-        "at": normalize_text(
-            note.get("add_time_utc")
-            or note.get("add_time_local")
-            or note.get("encountered_at")
+        "at": utc_or_local,
+        "local_at": normalize_optional_text(
+            note.get("add_time_local") or note.get("encountered_at") or utc_or_local
         ),
         "raw_source": first_text_field(note, SOURCE_CONTEXT_KEYS),
         "card_sentence": first_text_field(note, CARD_SENTENCE_KEYS),
@@ -117,11 +105,14 @@ def parse_encounters(value: Any) -> list[dict[str, str]]:
             raise ValueError("遇见记录 contains an invalid record")
         records.append(
             {
-                "id": normalize_text(item.get("id")),
-                "at": normalize_text(item.get("at")),
-                "raw_source": normalize_text(item.get("raw_source")),
-                "card_sentence": normalize_text(item.get("card_sentence")),
-                "origin": normalize_text(item.get("origin")),
+                "id": normalize_optional_text(item.get("id")),
+                "at": normalize_optional_text(item.get("at")),
+                "local_at": normalize_optional_text(
+                    item.get("local_at") or item.get("at")
+                ),
+                "raw_source": normalize_optional_text(item.get("raw_source")),
+                "card_sentence": normalize_optional_text(item.get("card_sentence")),
+                "origin": normalize_optional_text(item.get("origin")),
             }
         )
     return records
@@ -133,7 +124,7 @@ def _field(existing_fields: dict[str, Any] | None, name: str) -> str:
     raw = existing_fields.get(name)
     if isinstance(raw, dict):
         raw = raw.get("value")
-    return normalize_text(raw)
+    return normalize_optional_text(raw)
 
 
 def _sorted_records(records: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -144,13 +135,13 @@ def _sorted_records(records: list[dict[str, str]]) -> list[dict[str, str]]:
 
 def _history(records: list[dict[str, str]], latest_id: str) -> str:
     visible: list[str] = []
-    for record in _sorted_records(records):
+    for record in reversed(_sorted_records(records)):
         if record["id"] == latest_id or record.get("origin") == "generated":
             continue
         sentence = record.get("card_sentence") or record.get("raw_source")
         if sentence and sentence not in visible:
             visible.append(sentence)
-    return "<br>".join(html.escape(item) for item in visible[-HISTORY_LIMIT:])
+    return "<br>".join(html.escape(item) for item in visible[:HISTORY_LIMIT])
 
 
 def build_fields(
@@ -173,13 +164,18 @@ def build_fields(
     records = _sorted_records([*existing_records, record])
     latest_record = records[-1]
     word = first_text_field(note, ("word", "单词"))
-    meanings = normalize_list(
-        note.get("meaning") or note.get("语境释义") or note.get("释义")
+    meanings = normalize_string_list(
+        note.get("meaning") or note.get("语境释义") or note.get("释义"),
+        separator="|",
     )
     pos = first_text_field(note, ("part_of_speech", "pos", "词性"))
     meanings = fuse_pos_into_meaning(meanings, pos)
     group = forced_group or note_learning_group(note)
-    latest_at = latest_record["at"] or _field(existing_fields, "最近遇见")
+    latest_at = (
+        latest_record.get("local_at")
+        or latest_record["at"]
+        or _field(existing_fields, "最近遇见")
+    )
     incoming_is_latest = latest_record["id"] == record["id"]
     fields = {
         "单词": word,

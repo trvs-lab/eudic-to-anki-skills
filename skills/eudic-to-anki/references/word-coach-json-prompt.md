@@ -12,7 +12,7 @@
 - `pronunciation`: 完整美式 IPA，使用 `/.../`
 - `part_of_speech`: `n.`、`vt.`、`vi.`、`adj.`、`adv.`、`phr.` 等
 - `meaning`: 非空数组；每项以词性开头，给出当前语境中的简短中文义
-- `english_definition`: 4–32 词的自然、解释型英英释义
+- `english_definition`: 通常 6～18 词的自然、解释型英英释义
 - `word_family`: 可选；只写真正有帮助的词族或构词提示，不使用 `-` 或 `无`
 - `source_context`: 欧路原始来源句；原样保留，没有时为空
 - `card_sentence`: 卡片正面例句

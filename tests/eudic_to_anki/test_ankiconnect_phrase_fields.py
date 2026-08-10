@@ -104,6 +104,42 @@ class ContextAnchorFieldTests(unittest.TestCase):
         self.assertEqual(backfilled["遇见次数"], "2")
         self.assertIn("The storm inflicted serious damage", backfilled["历史语境"])
 
+    def test_recent_encounter_uses_local_time_and_history_is_newest_first(self) -> None:
+        first = ankiconnect_import.build_trvs_lab_fields(
+            source_note(
+                source_context="The first storm inflicted damage on the coast.",
+                card_sentence="The first storm inflicted damage on the coast.",
+                add_time_utc="2026-08-08T23:00:00Z",
+                add_time_local="2026-08-09 07:00:00",
+            ),
+            "[sound:inflict.mp3]",
+        )
+        second = ankiconnect_import.build_trvs_lab_fields(
+            source_note(
+                source_context="The second storm inflicted damage on nearby farms.",
+                card_sentence="The second storm inflicted damage on nearby farms.",
+                add_time_utc="2026-08-09T23:00:00Z",
+                add_time_local="2026-08-10 07:00:00",
+            ),
+            "[sound:inflict.mp3]",
+            existing_fields=first,
+        )
+        third = ankiconnect_import.build_trvs_lab_fields(
+            source_note(
+                source_context="The latest storm inflicted damage on several homes.",
+                card_sentence="The latest storm inflicted damage on several homes.",
+                add_time_utc="2026-08-10T23:00:00Z",
+                add_time_local="2026-08-11 07:00:00",
+            ),
+            "[sound:inflict.mp3]",
+            existing_fields=second,
+        )
+        self.assertEqual(third["最近遇见"], "2026-08-11 07:00:00")
+        self.assertLess(
+            third["历史语境"].index("second storm"),
+            third["历史语境"].index("first storm"),
+        )
+
     def test_required_fields_do_not_require_optional_word_family_or_chunk(self) -> None:
         fields = ankiconnect_import.build_trvs_lab_fields(
             source_note(word_family="", source_chunk="", source_chunk_meaning=""), ""
@@ -114,6 +150,31 @@ class ContextAnchorFieldTests(unittest.TestCase):
             ),
             [],
         )
+        self.assertEqual(
+            ankiconnect_import._missing_required_field_names(
+                fields, require_audio=True
+            ),
+            ["发音"],
+        )
+
+    def test_preview_counts_input_records_and_aggregated_terms(self) -> None:
+        counts = ankiconnect_import.preview_counts(
+            [
+                source_note(),
+                source_note(add_time_utc="2026-08-11T01:00:00Z"),
+                source_note(
+                    word="sphinx",
+                    learning_group="skip",
+                    add_time_utc="2026-08-11T02:00:00Z",
+                ),
+                {"word": "x", "learning_group": "reject"},
+            ]
+        )
+        self.assertEqual(counts["input_records"], 4)
+        self.assertEqual(counts["aggregated_terms"], 2)
+        self.assertEqual(counts["learn"], 2)
+        self.assertEqual(counts["skip"], 1)
+        self.assertEqual(counts["reject"], 1)
 
     def test_malformed_existing_encounter_log_stops_instead_of_losing_history(
         self,

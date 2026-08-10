@@ -4,32 +4,52 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import csv
 import json
 import re
 import shlex
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
 
-from coach_fields import MANAGED_LEARNING_GROUPS, normalize_word_key
+from coach_fields import (
+    MANAGED_LEARNING_GROUPS,
+    normalize_optional_text,
+    normalize_word_key,
+)
 from context_anchor import (
     build_fields as build_context_anchor_fields,
+    encounter_id,
     note_learning_group,
+    parse_encounters,
 )
 
 DEFAULT_ANKI_URL = "http://127.0.0.1:8765"
 DEFAULT_DECK = "words"
 STRUCTURED_VOCAB_MODEL = "TRVS-Lab"
 DEFAULT_MODEL = STRUCTURED_VOCAB_MODEL
-DEFAULT_AUDIO_FIELD = "发音"
 DEFAULT_AUDIO_FORMAT = "mp3"
 DEFAULT_AUDIO_VOICE = "en-US-GuyNeural"
 API_VERSION = 6
 CONTEXT_ANCHOR_TEMPLATE = "Context Anchor"
+SOUND_FIELD_RE = re.compile(r"^\[sound:([^\]\r\n]+)\]$")
+LEGACY_TRVS_FIELDS = {
+    "释义",
+    "词根",
+    "例句",
+    "学习标记",
+    "目标短语块",
+    "短语块锚点",
+    "短语块例句",
+    "短语块挖空",
+    "常用搭配",
+}
 TRVS_REQUIRED_FIELDS = (
     "单词",
     "规范词形",
@@ -107,8 +127,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--model-spec", default=str(DEFAULT_MODEL_SPEC_PATH))
     parser.add_argument("--no-ensure-model", action="store_true")
-    parser.add_argument("--front-field", default="Front")
-    parser.add_argument("--back-field", default="Back")
     parser.add_argument(
         "--audio-provider",
         choices=["none", "existing", "command"],
@@ -116,17 +134,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--audio-command")
     parser.add_argument("--audio-dir", default=str(DEFAULT_AUDIO_DIR))
-    parser.add_argument("--audio-field", default=DEFAULT_AUDIO_FIELD)
     parser.add_argument("--audio-format", default=DEFAULT_AUDIO_FORMAT)
     parser.add_argument("--audio-voice", default=DEFAULT_AUDIO_VOICE)
     parser.add_argument("--tag", action="append", default=[])
     parser.add_argument("--allow-duplicates", action="store_true")
-    parser.add_argument("--dia-upsert", action="store_true")
     parser.add_argument("--preserve-progress-on-update", action="store_true")
     parser.add_argument("--create-deck", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--require-audio", action="store_true")
-    parser.add_argument("--verify-required-fields", action="store_true")
     parser.add_argument("--no-sync", action="store_true")
     parser.add_argument("--ping", action="store_true")
     parser.add_argument("--anki-url", default=DEFAULT_ANKI_URL)
@@ -137,26 +151,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def normalize_text(value: Any) -> str:
-    if value is None:
-        return ""
-    text = str(value).strip()
-    return "" if text == "-" else text
-
-
-def normalize_list(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value).strip()
-    return [text] if text else []
-
-
 def field_value(note: dict[str, Any], *keys: str) -> str:
     for key in keys:
         if note.get(key) not in (None, ""):
-            return normalize_text(note[key])
+            return normalize_optional_text(note[key])
     return ""
 
 
@@ -257,23 +255,40 @@ def _model_css_needs_update(styling: Any) -> bool:
     return "trvs-style-version: context-anchor-v1" not in css
 
 
-def _migration_error(model_name: str) -> AnkiImportError:
+def _migration_error(
+    model_name: str, issues: list[str] | None = None
+) -> AnkiImportError:
+    details = f" Detected: {'; '.join(issues)}." if issues else ""
     return AnkiImportError(
         f"{model_name} still contains a legacy or incompatible card model. "
+        f"{details}"
         "Removing or renaming a generated card template in place can destroy scheduling data. "
         "Export a backup, delete the legacy TRVS-Lab notes/note type, then rerun the "
         "import to create the one-card Context Anchor model."
     )
 
 
-def assert_model_migration_safe(client: AnkiConnectClient, model_name: str) -> None:
+def inspect_model_issues(client: AnkiConnectClient, model_name: str) -> list[str]:
+    """Return read-only migration issues for an existing model."""
     models = client.invoke("modelNames") or []
     if model_name not in models:
-        return
+        return []
     templates = client.invoke("modelTemplates", modelName=model_name) or {}
     names = set(templates) if isinstance(templates, dict) else set()
     if names != {CONTEXT_ANCHOR_TEMPLATE}:
-        raise _migration_error(model_name)
+        rendered = ", ".join(sorted(names)) or "none"
+        return [f"card templates are {rendered}, expected {CONTEXT_ANCHOR_TEMPLATE}"]
+    fields = set(client.invoke("modelFieldNames", modelName=model_name) or [])
+    legacy_fields = sorted(fields & LEGACY_TRVS_FIELDS)
+    if legacy_fields:
+        return [f"legacy fields remain: {', '.join(legacy_fields)}"]
+    return []
+
+
+def assert_model_migration_safe(client: AnkiConnectClient, model_name: str) -> None:
+    issues = inspect_model_issues(client, model_name)
+    if issues:
+        raise _migration_error(model_name, issues)
 
 
 def ensure_model(
@@ -357,7 +372,7 @@ def build_trvs_lab_fields(
 def _field_text_value(raw: Any) -> str:
     if isinstance(raw, dict):
         raw = raw.get("value")
-    return normalize_text(raw)
+    return normalize_optional_text(raw)
 
 
 def _missing_required_field_names(
@@ -369,7 +384,7 @@ def _missing_required_field_names(
     missing: list[str] = []
     for name in required:
         value = _field_text_value(fields.get(name))
-        if not value or (name == "发音" and not value.startswith("[sound:")):
+        if not value or (name == "发音" and not _sound_filename(value)):
             missing.append(name)
     return missing
 
@@ -506,6 +521,7 @@ def upsert_context_anchor_notes(
             )
             fields: dict[str, str] | None = None
             changed = False
+            audio_repair = False
             target_group = current_group
             for note in note_group:
                 candidate_group = current_group
@@ -520,14 +536,20 @@ def upsert_context_anchor_notes(
                 if item_changed:
                     changed = True
                     target_group = candidate_group
-            if not changed or fields is None:
+                if note.get("_repair_audio"):
+                    audio_repair = True
+                    replacement_sound = field_value(note, "audio_html", "发音")
+                    if replacement_sound:
+                        fields["发音"] = replacement_sound
+            if (not changed and not audio_repair) or fields is None:
                 summary["idempotent"] += 1
                 continue
             if current_group == "defer" and target_group == "learn":
                 summary["defer_to_learn"] += 1
             fields["学习分组"] = target_group
             summary["updated"] += 1
-            summary["reset"] += 1
+            if changed:
+                summary["reset"] += 1
             verify_payload_required_fields(
                 [{"fields": fields}], require_audio=require_audio
             )
@@ -538,15 +560,18 @@ def upsert_context_anchor_notes(
                 note={
                     "id": note_ids[0],
                     "fields": fields,
-                    "tags": _tags_for_note(
-                        latest, global_tags or [], group=target_group
+                    "tags": (
+                        _tags_for_note(latest, global_tags or [], group=target_group)
+                        if changed
+                        else list(info.get("tags") or [])
                     ),
                 },
             )
-            client.invoke("forgetCards", cards=cards)
-            target_deck = managed_deck_name(base_deck, target_group)
-            if current_deck != target_deck:
-                client.invoke("changeDeck", cards=cards, deck=target_deck)
+            if changed:
+                client.invoke("forgetCards", cards=cards)
+                target_deck = managed_deck_name(base_deck, target_group)
+                if current_deck != target_deck:
+                    client.invoke("changeDeck", cards=cards, deck=target_deck)
             continue
 
         fields: dict[str, str] | None = None
@@ -581,13 +606,18 @@ def sanitize_filename(text: str) -> str:
     return base or "audio"
 
 
-def _validate_mp3(path: Path, *, word: str) -> None:
-    if not path.is_file() or path.stat().st_size < 4:
-        raise AnkiImportError(f"Audio for {word!r} is missing or empty: {path}")
-    with path.open("rb") as handle:
-        header = handle.read(3)
+def _validate_mp3_bytes(data: bytes, *, word: str, source: str) -> None:
+    if len(data) < 4:
+        raise AnkiImportError(f"Audio for {word!r} is missing or empty: {source}")
+    header = data[:3]
     if header != b"ID3" and not (header[0] == 0xFF and header[1] & 0xE0 == 0xE0):
-        raise AnkiImportError(f"Audio for {word!r} is not a valid MP3: {path}")
+        raise AnkiImportError(f"Audio for {word!r} is not a valid MP3: {source}")
+
+
+def _validate_mp3(path: Path, *, word: str) -> None:
+    if not path.is_file():
+        raise AnkiImportError(f"Audio for {word!r} is missing or empty: {path}")
+    _validate_mp3_bytes(path.read_bytes(), word=word, source=str(path))
 
 
 def generate_audio_with_command(
@@ -613,6 +643,15 @@ def generate_audio_with_command(
         raise AnkiImportError(
             f"Unsupported --audio-command placeholder {exc.args[0]!r}."
         ) from exc
+    if not any(Path(part).name == "edge_tts_runner.py" for part in template_args):
+        raise AnkiImportError(
+            "--audio-command must invoke edge_tts_runner.py; alternate TTS providers "
+            "and system TTS fallbacks are not allowed."
+        )
+    if "{voice}" not in command_template:
+        raise AnkiImportError(
+            "--audio-command must pass {voice} so retries keep the configured Edge voice."
+        )
 
     reasons: list[str] = []
     for attempt in (1, 2):
@@ -643,6 +682,8 @@ def generate_audio_with_command(
             else:
                 reason = str(exc)
             reasons.append(reason or f"attempt {attempt} failed")
+            if attempt == 1:
+                time.sleep(0.2)
     output_path.unlink(missing_ok=True)
     raise AnkiImportError(
         "Audio generation aborted before Anki note/card changes: "
@@ -658,39 +699,95 @@ def _audio_source(note: dict[str, Any]) -> Path | None:
     return None
 
 
+def _sound_filename(sound: str) -> str | None:
+    match = SOUND_FIELD_RE.fullmatch(sound.strip())
+    return match.group(1) if match else None
+
+
+def _anki_sound_is_valid(
+    client: AnkiConnectClient,
+    sound: str,
+    *,
+    word: str,
+    cache: dict[str, bool],
+) -> bool:
+    filename = _sound_filename(sound)
+    if not filename:
+        return False
+    if filename in cache:
+        return cache[filename]
+    encoded = client.invoke("retrieveMediaFile", filename=filename)
+    try:
+        data = base64.b64decode(str(encoded or ""), validate=True)
+        _validate_mp3_bytes(data, word=word, source=f"Anki media {filename!r}")
+    except (ValueError, binascii.Error, AnkiImportError):
+        cache[filename] = False
+        return False
+    cache[filename] = True
+    return True
+
+
 def reuse_existing_anki_audio(
     client: AnkiConnectClient, notes: list[dict[str, Any]], *, model: str
 ) -> None:
-    """Hydrate missing input audio from an existing note without mutating Anki."""
+    """Validate/reuse Anki audio and mark exact encounters without mutating Anki."""
     by_key: dict[str, list[dict[str, Any]]] = {}
+    media_cache: dict[str, bool] = {}
     for note in notes:
         if note_learning_group(note) == "reject":
             continue
         key = normalize_word_key(field_value(note, "word", "单词"))
         by_key.setdefault(key, []).append(note)
     for key, grouped_notes in by_key.items():
-        if any(
-            field_value(note, "audio_html", "发音").startswith("[sound:")
-            for note in grouped_notes
-        ):
-            continue
-        note_ids = find_context_anchor_note_ids(
-            client, model, field_value(grouped_notes[-1], "word", "单词")
-        )
+        word = field_value(grouped_notes[-1], "word", "单词")
+        note_ids = find_context_anchor_note_ids(client, model, word)
         if len(note_ids) > 1:
             raise AnkiImportError(
                 f"Found duplicate Anki notes while looking up audio for {key!r}."
             )
-        if not note_ids:
-            continue
-        infos = client.invoke("notesInfo", notes=note_ids) or []
-        if len(infos) != 1:
-            raise AnkiImportError(f"notesInfo could not read audio for {key!r}.")
-        sound = _field_text_value((infos[0].get("fields") or {}).get("发音"))
-        if not sound.startswith("[sound:"):
-            continue
+        existing_fields: dict[str, Any] = {}
+        existing_ids: set[str] = set()
+        if note_ids:
+            infos = client.invoke("notesInfo", notes=note_ids) or []
+            if len(infos) != 1:
+                raise AnkiImportError(f"notesInfo could not read audio for {key!r}.")
+            existing_fields = infos[0].get("fields") or {}
+            existing_ids = {
+                item["id"] for item in parse_encounters(existing_fields.get("遇见记录"))
+            }
+
+        reusable_sound = ""
         for note in grouped_notes:
-            note["audio_html"] = sound
+            supplied = field_value(note, "audio_html", "发音")
+            if supplied and _anki_sound_is_valid(
+                client, supplied, word=word, cache=media_cache
+            ):
+                reusable_sound = reusable_sound or supplied
+                continue
+            if supplied:
+                note["audio_html"] = ""
+                note["发音"] = ""
+
+        existing_sound = _field_text_value(existing_fields.get("发音"))
+        existing_sound_is_valid = bool(
+            existing_sound
+            and _anki_sound_is_valid(
+                client, existing_sound, word=word, cache=media_cache
+            )
+        )
+        if not reusable_sound and existing_sound_is_valid:
+            reusable_sound = existing_sound
+        if reusable_sound:
+            for note in grouped_notes:
+                if not field_value(note, "audio_html", "发音"):
+                    note["audio_html"] = reusable_sound
+        for note in grouped_notes:
+            if encounter_id(note) not in existing_ids:
+                continue
+            if existing_sound_is_valid:
+                note["_idempotent_encounter"] = True
+            else:
+                note["_repair_audio"] = True
 
 
 def prepare_all_audio(
@@ -704,7 +801,13 @@ def prepare_all_audio(
 ) -> dict[str, Path]:
     """Generate and validate every file locally before any Anki mutation."""
     pending: dict[str, Path] = {}
-    importable = [note for note in notes if note_learning_group(note) != "reject"]
+    importable = [
+        note
+        for note in notes
+        if note_learning_group(note) != "reject"
+        and not note.get("_idempotent_encounter")
+        and not _sound_filename(field_value(note, "audio_html", "发音"))
+    ]
     if not importable:
         return pending
     generated: list[Path] = []
@@ -723,12 +826,15 @@ def prepare_all_audio(
             )
             probe.unlink(missing_ok=True)
         for note in importable:
-            if field_value(note, "audio_html", "发音").startswith("[sound:"):
-                continue
             word = field_value(note, "word", "单词")
             key = normalize_word_key(word)
-            if key in pending or provider == "none":
+            if key in pending:
                 continue
+            if provider == "none":
+                raise AnkiImportError(
+                    f"No valid audio is available for {word!r}. Configure the Edge TTS "
+                    "command; importing without pronunciation audio is not allowed."
+                )
             filename = f"{sanitize_filename(key)}.{audio_format.lstrip('.')}"
             if provider == "existing":
                 source = _audio_source(note)
@@ -778,6 +884,18 @@ def _summary_text(summary: dict[str, int]) -> str:
     return ", ".join(f"{name}={value}" for name, value in summary.items())
 
 
+def preview_counts(notes: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {
+        group: sum(note_learning_group(note) == group for note in notes)
+        for group in (*MANAGED_LEARNING_GROUPS, "reject")
+    }
+    return {
+        "input_records": len(notes),
+        "aggregated_terms": len(_group_notes(notes)),
+        **counts,
+    }
+
+
 def main() -> int:
     generated_audio_to_clean: list[Path] = []
     try:
@@ -805,6 +923,10 @@ def main() -> int:
             raise AnkiImportError(
                 "Context Anchor enforces one note per normalized word; duplicates cannot be enabled."
             )
+        if args.audio_format.lstrip(".").casefold() != "mp3":
+            raise AnkiImportError(
+                "Context Anchor audio must use MP3; set --audio-format mp3."
+            )
         input_path = Path(args.input)
         if not input_path.is_file():
             raise AnkiImportError(f"Input file not found: {input_path}")
@@ -812,8 +934,14 @@ def main() -> int:
         if not notes:
             raise AnkiImportError("Input did not contain notes.")
 
-        assert_model_migration_safe(client, args.model)
+        model_issues = inspect_model_issues(client, args.model)
         if args.dry_run:
+            print(f"Input preview: {_summary_text(preview_counts(notes))}")
+            if model_issues:
+                print(f"Model issues: count={len(model_issues)}")
+                for issue in model_issues:
+                    print(f"  - {issue}")
+                return 1
             summary = upsert_context_anchor_notes(
                 client,
                 notes,
@@ -821,17 +949,15 @@ def main() -> int:
                 model=args.model,
                 global_tags=args.tag,
                 preserve_progress_on_update=args.preserve_progress_on_update,
-                require_audio=args.require_audio,
+                require_audio=False,
                 dry_run=True,
             )
-            counts = {
-                group: sum(note_learning_group(note) == group for note in notes)
-                for group in (*MANAGED_LEARNING_GROUPS, "reject")
-            }
-            print(f"Classification: {_summary_text(counts)}")
             print(f"Import preview: {_summary_text(summary)}")
+            print("Model issues: count=0")
             return 0
 
+        if model_issues:
+            raise _migration_error(args.model, model_issues)
         reuse_existing_anki_audio(client, notes, model=args.model)
         prepared = prepare_all_audio(
             notes,
@@ -859,7 +985,7 @@ def main() -> int:
             model=args.model,
             global_tags=args.tag,
             preserve_progress_on_update=args.preserve_progress_on_update,
-            require_audio=args.require_audio,
+            require_audio=True,
         )
         print(f"Context Anchor import: {_summary_text(summary)}")
         if not args.no_sync:

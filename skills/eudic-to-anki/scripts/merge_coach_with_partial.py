@@ -8,7 +8,11 @@ import json
 import sys
 from pathlib import Path
 
-from coach_fields import fuse_pos_into_meaning, normalize_word_key
+from coach_fields import (
+    fuse_pos_into_meaning,
+    normalize_string_list,
+    normalize_word_key,
+)
 
 COACH_FIELDS = (
     "pronunciation",
@@ -31,13 +35,6 @@ ENCOUNTER_FIELDS = (
     "add_time_local",
     "tags",
 )
-
-
-def _list(value: object) -> list[str]:
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value or "").strip()
-    return [text] if text else []
 
 
 def _pos(note: dict) -> str:
@@ -87,7 +84,9 @@ def main() -> int:
         pos = _pos(coach)
         merged = {
             "word": word,
-            "meaning": fuse_pos_into_meaning(_list(coach.get("meaning")), pos),
+            "meaning": fuse_pos_into_meaning(
+                normalize_string_list(coach.get("meaning")), pos
+            ),
         }
         for field in COACH_FIELDS:
             if field == "part_of_speech":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import importlib.util
 import subprocess
 import sys
@@ -29,6 +30,8 @@ class AudioFailurePolicyTests(unittest.TestCase):
                     return [1]
                 if action == "notesInfo":
                     return [{"fields": {"发音": {"value": "[sound:inflict.mp3]"}}}]
+                if action == "retrieveMediaFile":
+                    return base64.b64encode(b"ID3audio").decode("ascii")
                 raise AssertionError(action)
 
         note = {
@@ -38,6 +41,23 @@ class AudioFailurePolicyTests(unittest.TestCase):
         }
         ankiconnect_import.reuse_existing_anki_audio(Client(), [note], model="TRVS-Lab")
         self.assertEqual(note["audio_html"], "[sound:inflict.mp3]")
+
+        with mock.patch.object(
+            ankiconnect_import, "generate_audio_with_command"
+        ) as generate:
+            prepared = ankiconnect_import.prepare_all_audio(
+                [note],
+                provider="command",
+                command_template=(
+                    "python3 scripts/edge_tts_runner.py --text {text} "
+                    "--output {output} --voice {voice}"
+                ),
+                audio_dir=Path("unused"),
+                audio_format="mp3",
+                voice="en-US-GuyNeural",
+            )
+        self.assertEqual(prepared, {})
+        generate.assert_not_called()
 
     def test_transient_failure_retries_once_with_same_command_and_voice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -53,7 +73,10 @@ class AudioFailurePolicyTests(unittest.TestCase):
 
             with mock.patch.object(ankiconnect_import.subprocess, "run", fake_run):
                 result = ankiconnect_import.generate_audio_with_command(
-                    command_template="edge-runner --text {text} --output {output} --voice {voice}",
+                    command_template=(
+                        "python3 scripts/edge_tts_runner.py --text {text} "
+                        "--output {output} --voice {voice}"
+                    ),
                     word="inflict",
                     text="inflict",
                     output_path=output,
@@ -80,7 +103,10 @@ class AudioFailurePolicyTests(unittest.TestCase):
                     r"service=edge-tts.*word='inflict'.*voice='en-US-GuyNeural'.*attempts=2",
                 ):
                     ankiconnect_import.generate_audio_with_command(
-                        command_template="edge-runner --output {output} --voice {voice}",
+                        command_template=(
+                            "python3 scripts/edge_tts_runner.py --output {output} "
+                            "--voice {voice}"
+                        ),
                         word="inflict",
                         text="inflict",
                         output_path=output,
@@ -101,7 +127,10 @@ class AudioFailurePolicyTests(unittest.TestCase):
                     ankiconnect_import.AnkiImportError, "attempts=2"
                 ):
                     ankiconnect_import.generate_audio_with_command(
-                        command_template="edge-runner --output {output}",
+                        command_template=(
+                            "python3 scripts/edge_tts_runner.py --output {output} "
+                            "--voice {voice}"
+                        ),
                         word="inflict",
                         text="inflict",
                         output_path=output,
@@ -115,13 +144,72 @@ class AudioFailurePolicyTests(unittest.TestCase):
                 "Unsupported --audio-command placeholder",
             ):
                 ankiconnect_import.generate_audio_with_command(
-                    command_template="edge-runner {unknown}",
+                    command_template=(
+                        "python3 scripts/edge_tts_runner.py {unknown} --voice {voice}"
+                    ),
                     word="inflict",
                     text="inflict",
                     output_path=Path("unused.mp3"),
                     voice="en-US-GuyNeural",
                 )
         run.assert_not_called()
+
+    def test_alternate_tts_provider_is_rejected_before_execution(self) -> None:
+        with mock.patch.object(ankiconnect_import.subprocess, "run") as run:
+            with self.assertRaisesRegex(
+                ankiconnect_import.AnkiImportError,
+                "alternate TTS providers",
+            ):
+                ankiconnect_import.generate_audio_with_command(
+                    command_template="say {text} --voice {voice}",
+                    word="inflict",
+                    text="inflict",
+                    output_path=Path("unused.mp3"),
+                    voice="en-US-GuyNeural",
+                )
+        run.assert_not_called()
+
+    def test_invalid_existing_media_is_not_treated_as_reusable_audio(self) -> None:
+        class Client:
+            def invoke(self, action: str, **_: object) -> object:
+                if action == "findNotes":
+                    return [1]
+                if action == "notesInfo":
+                    return [
+                        {
+                            "fields": {
+                                "发音": {"value": "[sound:broken.mp3]"},
+                                "遇见记录": {
+                                    "value": '[{"id":"same","at":"2026-08-10"}]'
+                                },
+                            }
+                        }
+                    ]
+                if action == "retrieveMediaFile":
+                    return base64.b64encode(b"broken").decode("ascii")
+                raise AssertionError(action)
+
+        note = {
+            "word": "inflict",
+            "learning_group": "learn",
+            "audio_html": "",
+            "encounter_id": "same",
+        }
+        ankiconnect_import.reuse_existing_anki_audio(Client(), [note], model="TRVS-Lab")
+        self.assertEqual(note["audio_html"], "")
+        self.assertTrue(note["_repair_audio"])
+        self.assertNotIn("_idempotent_encounter", note)
+        with self.assertRaisesRegex(
+            ankiconnect_import.AnkiImportError, "No valid audio"
+        ):
+            ankiconnect_import.prepare_all_audio(
+                [note],
+                provider="none",
+                command_template=None,
+                audio_dir=Path("unused"),
+                audio_format="mp3",
+                voice="en-US-GuyNeural",
+            )
 
 
 if __name__ == "__main__":

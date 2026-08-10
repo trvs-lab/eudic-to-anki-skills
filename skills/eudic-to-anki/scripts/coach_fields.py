@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from typing import Any
 
 _POS_LEAD_RE = re.compile(r"^[a-z]{1,12}\.", re.I)
 
@@ -28,6 +29,26 @@ def first_text_field(note: dict, keys: tuple[str, ...]) -> str:
         if text:
             return text
     return ""
+
+
+def normalize_optional_text(value: Any) -> str:
+    """Normalize an optional authored field without preserving placeholders."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return "" if text == "-" else text
+
+
+def normalize_string_list(value: Any, *, separator: str | None = None) -> list[str]:
+    """Return non-empty strings from a scalar or authored list value."""
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = normalize_optional_text(value)
+    if not text:
+        return []
+    if separator is None:
+        return [text]
+    return [part.strip() for part in text.split(separator) if part.strip()]
 
 
 def normalize_word_key(value: object) -> str:

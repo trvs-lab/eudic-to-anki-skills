@@ -194,9 +194,9 @@ def _validate_note(note: dict[str, Any], index: int) -> list[str]:
         errors.append(
             f"note[{index}] word={word!r}: english_definition must be English"
         )
-    elif not 4 <= _word_count(definition) <= 32:
+    elif not 6 <= _word_count(definition) <= 18:
         errors.append(
-            f"note[{index}] word={word!r}: english_definition should contain 4-32 words"
+            f"note[{index}] word={word!r}: english_definition should contain 6-18 words"
         )
 
     word_family = _text(note, "word_family")

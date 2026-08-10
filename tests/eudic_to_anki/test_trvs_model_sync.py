@@ -74,6 +74,38 @@ class TrvsModelSyncTests(unittest.TestCase):
         with self.assertRaises(ankiconnect_import.AnkiImportError):
             ankiconnect_import.assert_model_migration_safe(Client(), "TRVS-Lab")
 
+    def test_context_anchor_template_with_legacy_fields_requires_reimport(self) -> None:
+        class Client:
+            def invoke(self, action: str, **_: object) -> object:
+                if action == "modelNames":
+                    return ["TRVS-Lab"]
+                if action == "modelTemplates":
+                    return {"Context Anchor": {}}
+                if action == "modelFieldNames":
+                    return ["单词", "学习标记", "卡片例句"]
+                raise AssertionError(action)
+
+        issues = ankiconnect_import.inspect_model_issues(Client(), "TRVS-Lab")
+        self.assertEqual(issues, ["legacy fields remain: 学习标记"])
+        with self.assertRaises(ankiconnect_import.AnkiImportError):
+            ankiconnect_import.assert_model_migration_safe(Client(), "TRVS-Lab")
+
+    def test_replaced_definition_root_and_example_fields_are_legacy(self) -> None:
+        class Client:
+            def invoke(self, action: str, **_: object) -> object:
+                if action == "modelNames":
+                    return ["TRVS-Lab"]
+                if action == "modelTemplates":
+                    return {"Context Anchor": {}}
+                if action == "modelFieldNames":
+                    return ["单词", "释义", "词根", "例句", "卡片例句"]
+                raise AssertionError(action)
+
+        issues = ankiconnect_import.inspect_model_issues(Client(), "TRVS-Lab")
+        self.assertIn("例句", issues[0])
+        self.assertIn("词根", issues[0])
+        self.assertIn("释义", issues[0])
+
     def test_css_version_marks_current_style(self) -> None:
         self.assertTrue(ankiconnect_import._model_css_needs_update(".card{}"))
         self.assertFalse(
