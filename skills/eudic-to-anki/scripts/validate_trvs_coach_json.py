@@ -294,8 +294,8 @@ def _validate_note(note: dict[str, Any], index: int) -> list[str]:
                     "omit word_family instead of using placeholder content"
                 )
             else:
-                source_text, arrow, target_text = breakdown_text.rpartition("→")
-                if _marked_root_or_affix_has_pos(source_text):
+                _, arrow, target_text = breakdown_text.rpartition("→")
+                if _marked_root_or_affix_has_pos(breakdown_text):
                     errors.append(
                         f"note[{index}] word={word!r}: word_family roots "
                         "and affixes must not include POS"

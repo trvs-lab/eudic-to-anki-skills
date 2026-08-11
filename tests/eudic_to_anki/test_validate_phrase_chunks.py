@@ -279,6 +279,21 @@ class ValidateContextAnchorTests(unittest.TestCase):
             result.stderr,
         )
 
+    def test_word_family_target_suffix_note_does_not_accept_pos_marker(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                word_family=(
+                    "拆解：ascend「v. 上升」→ ascension「n. 上升」"
+                    "（-ion「n. 名词后缀」）\n联想：ascent「n. 上升」"
+                )
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "word_family roots and affixes must not include POS",
+            result.stderr,
+        )
+
     def test_word_family_accepts_other_standard_pos_abbreviations(self) -> None:
         result = self.run_validator(
             valid_note(
