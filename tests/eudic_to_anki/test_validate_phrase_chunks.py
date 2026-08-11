@@ -143,19 +143,26 @@ class ValidateContextAnchorTests(unittest.TestCase):
         )
 
     def test_word_family_rejects_authored_html(self) -> None:
-        result = self.run_validator(
-            valid_note(
-                word_family=(
-                    "<strong>拆解：</strong>ascend「v. 上升」→ "
-                    "ascension「n. 上升」\n联想：ascent「n. 上升」"
+        cases = (
+            (
+                "<strong>拆解：</strong>ascend「v. 上升」→ "
+                "ascension「n. 上升」\n联想：ascent「n. 上升」"
+            ),
+            (
+                "拆解：ascend「v. 上升」→ ascension「n. 上升」\n"
+                "联想：ascent「n. 上升」<!-- hidden note -->"
+            ),
+        )
+        for word_family in cases:
+            with self.subTest(word_family=word_family):
+                result = self.run_validator(
+                    valid_note(word_family=word_family)
                 )
-            )
-        )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(
-            "word_family must be plain text without HTML",
-            result.stderr,
-        )
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    "word_family must be plain text without HTML",
+                    result.stderr,
+                )
 
     def test_word_family_requires_one_to_three_associations(self) -> None:
         cases = (
@@ -241,6 +248,48 @@ class ValidateContextAnchorTests(unittest.TestCase):
             "word_family target must include POS and Chinese meaning",
             result.stderr,
         )
+
+    def test_word_family_target_annotation_must_follow_the_arrow(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                word_family=(
+                    "拆解：ascend「v. 上升」→ -ion「n. 名词后缀」+ ascension\n"
+                    "联想：ascent「n. 上升」"
+                )
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "word_family target must include POS and Chinese meaning",
+            result.stderr,
+        )
+
+    def test_word_family_affixes_do_not_accept_pos_markers(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                word_family=(
+                    "拆解：ascend「v. 上升」+ -ion「n. 名词后缀」→ "
+                    "ascension「n. 上升」\n联想：ascent「n. 上升」"
+                )
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "word_family roots and affixes must not include POS",
+            result.stderr,
+        )
+
+    def test_word_family_accepts_other_standard_pos_abbreviations(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                word_family=(
+                    "拆解：what「pron. 什么」+ ever「adv. 曾经」→ "
+                    "whatever「pron. 无论什么」\n"
+                    "联想：whatsoever「pron. 无论什么」"
+                )
+            )
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_word_family_requires_breakdown_content(self) -> None:
         result = self.run_validator(
@@ -358,6 +407,8 @@ class WordCoachPromptContractTests(unittest.TestCase):
         self.assertIn("只列 `ascent, descend`", prompt)
         self.assertIn("`take a toll on` 等固定短语虚构词根词缀", prompt)
         self.assertIn("低置信度词源", prompt)
+        self.assertIn("基础词、目标词和联想词统一写成", prompt)
+        self.assertIn("前缀、后缀和词根写成", prompt)
 
 
 if __name__ == "__main__":

@@ -21,19 +21,11 @@ REPLACEMENT = "\ufffd"
 MOJIBAKE_MARKERS = ("Ã", "Â", "Ð", "Ñ")
 EN_WORD_RE = re.compile(r"[A-Za-z]+(?:[-'][A-Za-z]+)?")
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
-HTML_TAG_RE = re.compile(r"</?[A-Za-z][^>]*>")
+HTML_TAG_RE = re.compile(r"<[^>]+>", re.DOTALL)
 WORD_FAMILY_PLACEHOLDERS = {"-", "无", "不可拆分", "无构词线索", "无联想"}
-WORD_FAMILY_POS_MARKERS = (
-    "n.",
-    "v.",
-    "adj.",
-    "adv.",
-    "prep.",
-    "phr.",
-    "phr.v.",
-    "vt.",
-    "vi.",
-)
+WORD_FAMILY_POS_RE = re.compile(r"^(?:[A-Za-z]+\.)+\s+")
+WORD_FAMILY_TARGET_RE = re.compile(r"^\s*[A-Za-z][A-Za-z' -]*「([^」]+)」")
+WORD_FAMILY_TERM_RE = re.compile(r"([-A-Za-z/']+)「([^」]+)」")
 IMPORTABLE_REQUIRED_KEYS = (
     "word",
     "pronunciation",
@@ -127,16 +119,14 @@ def _split_word_family_associations(text: str) -> list[str]:
 
 
 def _annotation_has_pos_and_chinese_meaning(annotation: str) -> bool:
-    has_pos = any(
-        annotation.startswith(f"{marker} ") for marker in WORD_FAMILY_POS_MARKERS
-    )
+    has_pos = WORD_FAMILY_POS_RE.match(annotation) is not None
     return has_pos and CJK_RE.search(annotation) is not None
 
 
-def _text_has_pos_and_chinese_annotation(text: str) -> bool:
-    return any(
-        _annotation_has_pos_and_chinese_meaning(annotation.strip())
-        for annotation in re.findall(r"「([^」]+)」", text)
+def _target_has_pos_and_chinese_meaning(text: str) -> bool:
+    match = WORD_FAMILY_TARGET_RE.match(text)
+    return bool(
+        match and _annotation_has_pos_and_chinese_meaning(match.group(1).strip())
     )
 
 
@@ -145,6 +135,14 @@ def _association_has_pos_and_chinese_meaning(association: str) -> bool:
     if not word.strip() or not opening or not remainder.endswith("」"):
         return False
     return _annotation_has_pos_and_chinese_meaning(remainder[:-1].strip())
+
+
+def _marked_root_or_affix_has_pos(text: str) -> bool:
+    for term, annotation in WORD_FAMILY_TERM_RE.findall(text):
+        is_marked_unit = term.startswith("-") or term.endswith("-") or "/" in term
+        if is_marked_unit and WORD_FAMILY_POS_RE.match(annotation.strip()):
+            return True
+    return False
 
 
 def _is_complete_importable_note(note: dict[str, Any]) -> bool:
@@ -296,8 +294,13 @@ def _validate_note(note: dict[str, Any], index: int) -> list[str]:
                     "omit word_family instead of using placeholder content"
                 )
             else:
-                _, arrow, target_text = breakdown_text.rpartition("→")
-                if not arrow or not _text_has_pos_and_chinese_annotation(target_text):
+                source_text, arrow, target_text = breakdown_text.rpartition("→")
+                if _marked_root_or_affix_has_pos(source_text):
+                    errors.append(
+                        f"note[{index}] word={word!r}: word_family roots "
+                        "and affixes must not include POS"
+                    )
+                if not arrow or not _target_has_pos_and_chinese_meaning(target_text):
                     errors.append(
                         f"note[{index}] word={word!r}: word_family target "
                         "must include POS and Chinese meaning"
