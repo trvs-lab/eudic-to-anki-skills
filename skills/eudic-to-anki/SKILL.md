@@ -23,23 +23,28 @@ Execute the complete pipeline. Treat this directory as the working directory.
 - Use an absolute artifact directory such as `/Users/alice/Documents/eudic-to-anki-temp`.
 - Import into `words::learn`、`words::defer`、`words::skip`. Keep `reject` internal and do not import it.
 
-## Execute
+## Route before executing
+
+Select exactly one workflow before running any export command:
+
+- A single day or「昨天」: read and follow `workflows/yesterday.md`.
+- A 连续日期范围, including「过去一周」or「最近 N 天」: read and follow `workflows/date-range.md`.
+- A user-supplied word list: read and follow `workflows/word-list.md`.
+
+Resolve a relative range in the system local timezone as one inclusive start/end pair. One continuous-range request must produce exactly one export process. Never expand it into daily commands, parallel tool calls, or sub-agent exports.
+
+## Execute the selected workflow
 
 1. Create the artifact directory in a separate command.
 2. Run `bash scripts/check_env.sh`.
-3. Export every encounter, retaining `category_id`、`category_name`、`add_time_utc`、`add_time_local` and `context_line`:
-   `python3 scripts/eudic_export.py --all-categories --start-date <D> --end-date <D> --format csv --output <ABS_TEMP_DIR>/_day_<D>_export.csv`
-4. Build placeholders without deduplicating repeated encounters:
-   `python3 scripts/build_dia_json_from_csv.py --csv <ABS_TEMP_DIR>/_day_<D>_export.csv --output <ABS_TEMP_DIR>/_day_<D>_partial.json --eudic-words-only`
-5. Author coach JSON using `references/word-coach-json-prompt.md`, then merge it with every exported row:
-   `python3 scripts/merge_coach_with_partial.py --partial <ABS_TEMP_DIR>/_day_<D>_partial.json --coach <ABS_TEMP_DIR>/coach.json -o <ABS_TEMP_DIR>/_day_<D>_import.json`
-6. Validate:
-   `python3 scripts/validate_trvs_coach_json.py <ABS_TEMP_DIR>/_day_<D>_import.json`
-7. Preview:
-   `python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/_day_<D>_import.json --deck words --create-deck --dry-run`
-8. Import with required audio:
-   `python3 scripts/ankiconnect_import.py --input <ABS_TEMP_DIR>/_day_<D>_import.json --deck words --create-deck --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text "{word}" --output "{output}" --voice "{voice}"'`
-9. After success, run `bash scripts/cleanup_import_artifacts.sh`.
+3. Run the selected workflow's export and placeholder commands exactly. Preserve every encounter and its `category_id`、`category_name`、`add_time_utc`、`add_time_local` and `context_line`.
+4. Author coach JSON using `references/word-coach-json-prompt.md`, merge it with every placeholder row, then validate the resulting `<IMPORT_JSON>`.
+5. Preview `<IMPORT_JSON>` with `python3 scripts/ankiconnect_import.py --input <IMPORT_JSON> --deck words --create-deck --dry-run`.
+6. Import with required audio:
+   `python3 scripts/ankiconnect_import.py --input <IMPORT_JSON> --deck words --create-deck --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text "{word}" --output "{output}" --voice "{voice}"'`
+7. After success, run `bash scripts/cleanup_import_artifacts.sh`.
+
+If export reports a concurrent export, rate limit, network failure, or parse failure, stop the entire pipeline. Do not generate placeholders, coach content, audio, or Anki changes, and do not retry by splitting the range.
 
 Run rule-covered commands directly. Do not wrap them in a login shell or join them with shell operators.
 

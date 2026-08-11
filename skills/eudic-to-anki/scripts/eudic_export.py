@@ -5,27 +5,73 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fcntl
 import json
+import math
 import os
 import ssl
 import sys
+import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timedelta, tzinfo
+from datetime import datetime, timedelta, timezone, tzinfo
+from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable, Literal, TextIO
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 BASE_URL = "https://api.frdic.com/api/open/v1"
 DEFAULT_PAGE_SIZE = 100
 OPENAPI_DOC_URL = "https://my.eudic.net/OpenAPI/Authorization"
+EXPORT_LOCK_PATH = Path(tempfile.gettempdir()) / "eudic-to-anki-export.lock"
+REQUEST_INTERVAL_SECONDS = 2.4
+REQUEST_MONOTONIC = time.monotonic
+REQUEST_SLEEP = time.sleep
+MAX_RETRY_AFTER_SECONDS = 120.0
+
+
+def current_utc_time() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+REQUEST_UTC_NOW = current_utc_time
 
 
 class ApiError(RuntimeError):
     """Raised when the Eudic API returns an error."""
+
+
+class HttpResponseError(RuntimeError):
+    def __init__(self, code: int, message: str, headers: Any) -> None:
+        super().__init__(f"HTTP {code}: {message}")
+        self.code = code
+        self.message = message
+        self.headers = headers
+
+
+def acquire_export_lock() -> TextIO:
+    EXPORT_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    handle = EXPORT_LOCK_PATH.open("a+", encoding="utf-8")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        handle.close()
+        raise ApiError(
+            "Another Eudic export is already running. Do not start concurrent "
+            "exports; wait for it to finish, then use one single date-range command."
+        ) from exc
+    return handle
+
+
+def release_export_lock(handle: TextIO) -> None:
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
 
 
 @dataclass
@@ -33,6 +79,65 @@ class Category:
     id: str
     language: str
     name: str
+
+
+@dataclass
+class RequestStats:
+    category_requests: int = 0
+    word_page_requests: int = 0
+    retry_requests: int = 0
+
+    @property
+    def total_requests(self) -> int:
+        return self.category_requests + self.word_page_requests + self.retry_requests
+
+    def summary(self) -> str:
+        return (
+            "Request stats: "
+            f"categories={self.category_requests}, "
+            f"word_pages={self.word_page_requests}, "
+            f"retries={self.retry_requests}, "
+            f"total={self.total_requests}"
+        )
+
+
+class RequestController:
+    def __init__(
+        self,
+        stats: RequestStats,
+        *,
+        monotonic: Callable[[], float],
+        sleep: Callable[[float], None],
+        interval_seconds: float = REQUEST_INTERVAL_SECONDS,
+    ) -> None:
+        self.stats = stats
+        self.monotonic = monotonic
+        self.sleep = sleep
+        self.interval_seconds = interval_seconds
+        self.last_started_at: float | None = None
+
+    def before_request(
+        self, request_kind: Literal["category", "word_page", "retry"]
+    ) -> None:
+        now = self.monotonic()
+        if self.last_started_at is not None:
+            wait_seconds = self.interval_seconds - (now - self.last_started_at)
+            if wait_seconds > 0:
+                self.sleep(wait_seconds)
+                now = self.monotonic()
+        self.last_started_at = now
+
+        if request_kind == "category":
+            self.stats.category_requests += 1
+        elif request_kind == "word_page":
+            self.stats.word_page_requests += 1
+        else:
+            self.stats.retry_requests += 1
+
+    def before_retry(self, retry_after_seconds: float) -> None:
+        if retry_after_seconds > 0:
+            self.sleep(retry_after_seconds)
+        self.before_request("retry")
 
 
 def _timezone_candidates_from_system() -> list[str]:
@@ -202,6 +307,77 @@ def eudic_ssl_context() -> ssl.SSLContext:
     return ctx
 
 
+def _http_error_message(exc: urllib.error.HTTPError) -> str:
+    body_text = exc.read().decode("utf-8", errors="replace")
+    try:
+        parsed = json.loads(body_text)
+    except json.JSONDecodeError:
+        return body_text or exc.reason
+    if isinstance(parsed, dict) and parsed.get("message"):
+        return str(parsed["message"])
+    return body_text or exc.reason
+
+
+def _perform_http_request(request: urllib.request.Request) -> dict[str, Any]:
+    try:
+        with urllib.request.urlopen(request, context=eudic_ssl_context()) as response:
+            raw = response.read().decode("utf-8")
+            if response.status == 204:
+                return {}
+            try:
+                return json.loads(raw) if raw else {}
+            except json.JSONDecodeError as exc:
+                raise ApiError("Eudic returned an invalid JSON response.") from exc
+    except urllib.error.HTTPError as exc:
+        raise HttpResponseError(
+            exc.code,
+            _http_error_message(exc),
+            exc.headers,
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise ApiError(f"Network error: {exc.reason}") from exc
+
+
+def _is_rate_limit_error(error: HttpResponseError) -> bool:
+    if error.code == 429:
+        return True
+    if error.code != 403:
+        return False
+    message = error.message.casefold()
+    markers = (
+        "too many requests",
+        "rate limit",
+        "request too frequently",
+        "access too frequently",
+        "访问过于频繁",
+        "请求过于频繁",
+        "访问频率过高",
+        "请求频率过高",
+    )
+    return any(marker in message for marker in markers)
+
+
+def _retry_after_seconds(headers: Any) -> float | None:
+    raw_value = headers.get("Retry-After") if headers is not None else None
+    if raw_value is None:
+        return None
+    value = str(raw_value).strip()
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        seconds = (retry_at.astimezone(timezone.utc) - REQUEST_UTC_NOW()).total_seconds()
+
+    if not math.isfinite(seconds) or not 0 <= seconds <= MAX_RETRY_AFTER_SECONDS:
+        return None
+    return seconds
+
+
 def api_request(
     path: str,
     auth_header: str,
@@ -209,6 +385,8 @@ def api_request(
     method: str = "GET",
     query: dict[str, Any] | None = None,
     body: dict[str, Any] | None = None,
+    request_controller: RequestController,
+    request_kind: Literal["category", "word_page"],
 ) -> dict[str, Any]:
     url = f"{BASE_URL}{path}"
     if query:
@@ -226,30 +404,37 @@ def api_request(
         headers["Content-Type"] = "application/json"
 
     request = urllib.request.Request(url, data=payload, headers=headers, method=method)
+    request_controller.before_request(request_kind)
     try:
-        with urllib.request.urlopen(request, context=eudic_ssl_context()) as response:
-            raw = response.read().decode("utf-8")
-            if response.status == 204:
-                return {}
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as exc:
-        body_text = exc.read().decode("utf-8", errors="replace")
-        message = body_text
+        return _perform_http_request(request)
+    except HttpResponseError as exc:
+        if not _is_rate_limit_error(exc):
+            raise ApiError(str(exc)) from exc
+        retry_after = _retry_after_seconds(exc.headers)
+        if retry_after is None:
+            raise ApiError(
+                f"{exc}. Rate limit response did not include a valid Retry-After "
+                "between 0 and 120 seconds; export stopped without retrying."
+            ) from exc
+
+        request_controller.before_retry(retry_after)
         try:
-            parsed = json.loads(body_text)
-            message = parsed.get("message") or body_text
-        except json.JSONDecodeError:
-            pass
-        raise ApiError(f"HTTP {exc.code}: {message}") from exc
-    except urllib.error.URLError as exc:
-        raise ApiError(f"Network error: {exc.reason}") from exc
+            return _perform_http_request(request)
+        except HttpResponseError as retry_exc:
+            raise ApiError(
+                f"{retry_exc}. The single allowed rate-limit retry failed; export stopped."
+            ) from retry_exc
 
 
-def list_categories(language: str, auth_header: str) -> list[Category]:
+def list_categories(
+    language: str, auth_header: str, request_controller: RequestController
+) -> list[Category]:
     response = api_request(
         "/studylist/category",
         auth_header,
         query={"language": language},
+        request_controller=request_controller,
+        request_kind="category",
     )
     return [
         Category(
@@ -268,6 +453,7 @@ def fetch_words_page(
     page: int,
     page_size: int,
     auth_header: str,
+    request_controller: RequestController,
 ) -> list[dict[str, Any]]:
     response = api_request(
         "/studylist/words",
@@ -278,6 +464,8 @@ def fetch_words_page(
             "page": page,
             "page_size": page_size,
         },
+        request_controller=request_controller,
+        request_kind="word_page",
     )
     return response.get("data", []) or []
 
@@ -288,6 +476,7 @@ def fetch_all_words(
     category_id: str,
     page_size: int,
     auth_header: str,
+    request_controller: RequestController,
 ) -> list[dict[str, Any]]:
     for first_page in (1, 0):
         records: list[dict[str, Any]] = []
@@ -299,6 +488,7 @@ def fetch_all_words(
                 page=page,
                 page_size=page_size,
                 auth_header=auth_header,
+                request_controller=request_controller,
             )
             if page == first_page and not items and first_page == 1:
                 records = []
@@ -326,7 +516,10 @@ def parse_date(date_text: str | None, tz: tzinfo, is_end: bool) -> datetime | No
 
 
 def parse_api_time(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ApiError(f"Invalid Eudic encounter timestamp: {value!r}") from exc
 
 
 def filter_records(
@@ -411,6 +604,38 @@ def ensure_output_dir(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def write_text_atomically(
+    path: Path,
+    write_content: Callable[[TextIO], None],
+    *,
+    newline: str | None = None,
+) -> None:
+    ensure_output_dir(path)
+    descriptor, temp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=str(path.parent),
+    )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(
+            descriptor,
+            "w",
+            encoding="utf-8",
+            newline=newline,
+        ) as handle:
+            descriptor = -1
+            write_content(handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    except BaseException:
+        if descriptor >= 0:
+            os.close(descriptor)
+        temp_path.unlink(missing_ok=True)
+        raise
+
+
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fieldnames = [
         "category_id",
@@ -423,19 +648,28 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "star",
         "context_line",
     ]
-    ensure_output_dir(path)
-    with path.open("w", encoding="utf-8", newline="") as handle:
+    def write_content(handle: TextIO) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
 
+    try:
+        write_text_atomically(path, write_content, newline="")
+    except Exception as exc:
+        raise ApiError(f"Could not write CSV output atomically to {path}: {exc}") from exc
+
 
 def write_json(path: Path, rows: list[dict[str, Any]], meta: dict[str, Any]) -> None:
     payload = {"meta": meta, "data": rows}
-    ensure_output_dir(path)
-    with path.open("w", encoding="utf-8") as handle:
+
+    def write_content(handle: TextIO) -> None:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
+
+    try:
+        write_text_atomically(path, write_content)
+    except Exception as exc:
+        raise ApiError(f"Could not write JSON output atomically to {path}: {exc}") from exc
 
 
 def print_categories(categories: list[Category]) -> None:
@@ -449,15 +683,24 @@ def print_categories(categories: list[Category]) -> None:
 
 
 def main() -> int:
+    lock_handle: TextIO | None = None
+    stats = RequestStats()
     try:
         args = parse_args()
         tz, timezone_name = resolve_timezone(args.timezone)
 
         auth_header = get_auth_header(args.token)
-        categories = list_categories(args.language, auth_header)
+        lock_handle = acquire_export_lock()
+        request_controller = RequestController(
+            stats,
+            monotonic=REQUEST_MONOTONIC,
+            sleep=REQUEST_SLEEP,
+        )
+        categories = list_categories(args.language, auth_header, request_controller)
 
         if args.list_categories:
             print_categories(categories)
+            print(stats.summary())
             return 0
 
         selected = resolve_categories(
@@ -479,6 +722,7 @@ def main() -> int:
                 category_id=category.id,
                 page_size=args.page_size,
                 auth_header=auth_header,
+                request_controller=request_controller,
             )
             rows.extend(
                 filter_records(
@@ -516,10 +760,15 @@ def main() -> int:
             )
 
         print(f"Exported {len(rows)} words to {output_path}")
+        print(stats.summary())
         return 0
     except ApiError as exc:
         print(f"Error: {exc}", file=sys.stderr)
+        print(stats.summary(), file=sys.stderr)
         return 1
+    finally:
+        if lock_handle is not None:
+            release_export_lock(lock_handle)
 
 
 if __name__ == "__main__":

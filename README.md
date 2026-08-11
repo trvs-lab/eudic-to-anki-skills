@@ -14,6 +14,7 @@ An Agent Skill that exports vocabulary encounters from Eudic and imports one-car
 - Manages `learn`, `defer`, and `skip` decks; invalid `reject` entries remain outside Anki.
 - Resets the single card for a distinct new encounter and does nothing for an identical encounter ID.
 - Uses Edge-TTS with one retry. A second failure aborts the import; system TTS is never used as a fallback.
+- Resolves a continuous date range into one export process, then protects Eudic requests with a shared local lock, 25-request/minute pacing, bounded `Retry-After` handling, atomic output, and request statistics.
 
 ## Install
 

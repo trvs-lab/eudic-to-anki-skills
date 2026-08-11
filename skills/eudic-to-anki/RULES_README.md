@@ -70,6 +70,7 @@ prefix_rule(
     justification = "Allow Eudic export when running from skill root.",
     match = [
         "python3 scripts/eudic_export.py --all-categories --start-date 2026-05-01 --end-date 2026-05-01 --format csv --output <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_export.csv",
+        "python3 scripts/eudic_export.py --all-categories --start-date 2026-05-01 --end-date 2026-05-07 --format csv --output <HOME>/Documents/eudic-to-anki-temp/_range_2026-05-01_2026-05-07_export.csv",
         "python3 scripts/eudic_export.py --list-categories",
     ],
 )
@@ -80,6 +81,7 @@ prefix_rule(
     justification = "Allow Eudic export when automation invokes absolute installed-skill path.",
     match = [
         "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/eudic_export.py --all-categories --start-date 2026-05-01 --end-date 2026-05-01 --format csv --output <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_export.csv",
+        "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/eudic_export.py --all-categories --start-date 2026-05-01 --end-date 2026-05-07 --format csv --output <HOME>/Documents/eudic-to-anki-temp/_range_2026-05-01_2026-05-07_export.csv",
         "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/eudic_export.py --list-categories",
     ],
 )
@@ -90,6 +92,7 @@ prefix_rule(
     justification = "Allow wrapped export under login zsh from skill root.",
     match = [
         "python3 scripts/run_with_login_zsh.py python3 scripts/eudic_export.py --all-categories --start-date 2026-05-01 --end-date 2026-05-01 --format csv --output <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_export.csv",
+        "python3 scripts/run_with_login_zsh.py python3 scripts/eudic_export.py --all-categories --start-date 2026-05-01 --end-date 2026-05-07 --format csv --output <HOME>/Documents/eudic-to-anki-temp/_range_2026-05-01_2026-05-07_export.csv",
     ],
 )
 
@@ -99,6 +102,7 @@ prefix_rule(
     justification = "Allow wrapped export under login zsh with absolute installed-skill paths.",
     match = [
         "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/run_with_login_zsh.py python3 <HOME>/.agents/skills/eudic-to-anki/scripts/eudic_export.py --all-categories --start-date 2026-05-01 --end-date 2026-05-01 --format csv --output <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_export.csv",
+        "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/run_with_login_zsh.py python3 <HOME>/.agents/skills/eudic-to-anki/scripts/eudic_export.py --all-categories --start-date 2026-05-01 --end-date 2026-05-07 --format csv --output <HOME>/Documents/eudic-to-anki-temp/_range_2026-05-01_2026-05-07_export.csv",
     ],
 )
 

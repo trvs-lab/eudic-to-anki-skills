@@ -30,3 +30,10 @@ python3 scripts/run_with_login_zsh.py python3 scripts/eudic_export.py --list-cat
 
 - 先把 `~/Documents/...` 展开成绝对路径，例如 `/Users/alice/Documents/eudic-to-anki-temp/...`
 - 若需要创建目录，先单独执行 `mkdir -p /Users/alice/Documents/eudic-to-anki-temp`
+
+## 日期范围与访问限制
+
+- 「过去一周」「最近 N 天」或明确的连续日期范围必须解析为一个闭区间，并通过一条同时包含 `--start-date` 与 `--end-date` 的命令导出。不得按天拆分或并行执行。
+- 日期过滤发生在本地。一次导出仍会查询一次分类，并逐分类分页读取生词，因此一条命令可能对应多次 HTTP 请求。
+- 导出器使用本机单实例锁，并将所有请求限制为最多 25 次／分钟。已有导出运行、限频重试失败或认证／网络／解析失败时，应停止完整制卡流程。
+- 限频响应只有在提供合法 `Retry-After` 时才重试当前请求一次；不要人工并发重试，也不要改成多条单日命令。
