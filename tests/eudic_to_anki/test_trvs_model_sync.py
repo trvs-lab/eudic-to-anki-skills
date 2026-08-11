@@ -41,7 +41,10 @@ class MissingModelClient:
         self.templates: dict[str, dict[str, str]] = {}
         self.css = ""
         self.fail_action: str | None = None
+        self.fail_error: Exception | None = None
         self.ignore_actions: set[str] = set()
+        self.notes: dict[int, dict[str, object]] = {}
+        self.next_note_id = 100
 
     def set_existing(
         self,
@@ -63,7 +66,7 @@ class MissingModelClient:
         if self.events is not self.actions:
             self.events.append(action)
         if action == self.fail_action:
-            raise RuntimeError(f"forced failure: {action}")
+            raise self.fail_error or RuntimeError(f"forced failure: {action}")
         if action in self.ignore_actions:
             return None
         if action == "version":
@@ -100,7 +103,70 @@ class MissingModelClient:
             self.css = str(model["css"])
             return None
         if action == "findNotes":
-            return [1, 2]
+            query = str(params.get("query") or "")
+            if query == 'note:"TRVS-Lab"':
+                return [1, 2]
+            if "规范词形:" in query:
+                key = query.split('规范词形:"', 1)[1].split('"', 1)[0]
+                return [
+                    note_id
+                    for note_id, note in self.notes.items()
+                    if str(note["fields"].get("规范词形") or "") == key
+                ]
+            if "单词:" in query:
+                word = query.split('单词:"', 1)[1].split('"', 1)[0]
+                return [
+                    note_id
+                    for note_id, note in self.notes.items()
+                    if str(note["fields"].get("单词") or "") == word
+                ]
+            return []
+        if action == "notesInfo":
+            return [
+                {
+                    "noteId": note_id,
+                    "fields": {
+                        name: {"value": value}
+                        for name, value in self.notes[int(note_id)]["fields"].items()
+                    },
+                    "tags": list(self.notes[int(note_id)]["tags"]),
+                    "cards": [int(self.notes[int(note_id)]["card_id"])],
+                }
+                for note_id in params["notes"]
+                if int(note_id) in self.notes
+            ]
+        if action == "cardsInfo":
+            rows: list[dict[str, object]] = []
+            for card_id in params["cards"]:
+                for note in self.notes.values():
+                    if int(note["card_id"]) == int(card_id):
+                        rows.append({"cardId": card_id, "deckName": note["deck"]})
+            return rows
+        if action == "addNote":
+            payload = params["note"]
+            note_id = self.next_note_id
+            self.next_note_id += 1
+            self.notes[note_id] = {
+                "fields": dict(payload["fields"]),
+                "tags": list(payload.get("tags") or []),
+                "card_id": note_id + 1000,
+                "deck": str(payload["deckName"]),
+            }
+            return note_id
+        if action == "updateNote":
+            payload = params["note"]
+            note = self.notes[int(payload["id"])]
+            note["fields"] = dict(payload["fields"])
+            note["tags"] = list(payload.get("tags") or [])
+            return None
+        if action == "changeDeck":
+            for card_id in params["cards"]:
+                for note in self.notes.values():
+                    if int(note["card_id"]) == int(card_id):
+                        note["deck"] = str(params["deck"])
+            return None
+        if action == "forgetCards":
+            return None
         if action == "deckNames":
             return ["words::learn", "words::defer", "words::skip"]
         if action == "sync":
@@ -121,7 +187,7 @@ def write_model_spec(root: Path) -> Path:
         json.dumps(
             {
                 "model_name": "TRVS-Lab",
-                "fields": ["单词", "语境释义", "卡片例句", "发音"],
+                "fields": list(model_contract.CONTEXT_ANCHOR_FIELDS),
                 "css_path": "style.css",
                 "card_templates": [
                     {
@@ -138,17 +204,44 @@ def write_model_spec(root: Path) -> Path:
     return spec_path
 
 
+def write_import_input(
+    root: Path,
+    *,
+    encounter_id: str = "encounter-1",
+    audio_html: str = "[sound:anchor.mp3]",
+) -> Path:
+    input_path = root / "notes.json"
+    input_path.write_text(
+        json.dumps(
+            [
+                {
+                    "word": "anchor",
+                    "pronunciation": "/ˈæŋkər/",
+                    "meaning": ["n. 锚；依托"],
+                    "english_definition": "a secure point that provides support",
+                    "source_context": "The example gives the new word a clear anchor.",
+                    "card_sentence": "The example gives the new word a clear anchor.",
+                    "sentence_origin": "source",
+                    "learning_group": "learn",
+                    "category_id": "book-1",
+                    "add_time_utc": "2026-08-11T01:00:00Z",
+                    "encounter_id": encounter_id,
+                    "audio_html": audio_html,
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return input_path
+
+
 def run_import_cli(argv: list[str], client: object) -> tuple[int, str, str]:
     stdout = io.StringIO()
     stderr = io.StringIO()
     with (
         mock.patch.object(sys, "argv", ["ankiconnect_import.py", *argv]),
         mock.patch.object(ankiconnect_import, "AnkiConnectClient", return_value=client),
-        mock.patch.object(
-            ankiconnect_import,
-            "upsert_context_anchor_notes",
-            return_value={"added": 0, "updated": 0, "unchanged": 0},
-        ),
         contextlib.redirect_stdout(stdout),
         contextlib.redirect_stderr(stderr),
     ):
@@ -171,15 +264,26 @@ def run_sync_cli(argv: list[str], client: object) -> tuple[int, str, str]:
     return code, stdout.getvalue(), stderr.getvalue()
 
 
+def model_lock_is_available() -> bool:
+    model_contract.MODEL_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with model_contract.MODEL_LOCK_PATH.open("a+", encoding="utf-8") as lock:
+        acquired = False
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            acquired = True
+        except BlockingIOError:
+            return False
+        finally:
+            if acquired:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+    return True
+
+
 class ImportModelDryRunCliTests(unittest.TestCase):
     def test_missing_model_dry_run_reports_create_without_writes_or_audio(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             client = MissingModelClient()
 
@@ -236,6 +340,7 @@ class StandaloneModelSyncCliTests(unittest.TestCase):
         self.assertEqual(client.actions.count("createModel"), 1)
         self.assertIn("Model verify: status=exact", stdout)
         self.assertNotIn("sync", client.actions)
+        self.assertTrue(model_lock_is_available())
 
     def test_default_run_performs_complete_compatible_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -308,6 +413,7 @@ class StandaloneModelSyncCliTests(unittest.TestCase):
             {"modelFieldAdd", "updateModelTemplates", "updateModelStyling", "sync"}
             & set(client.actions)
         )
+        self.assertTrue(model_lock_is_available())
 
     def test_removed_partial_update_flags_are_rejected(self) -> None:
         for flag in ("--templates-only", "--css-only", "--create-if-missing"):
@@ -364,6 +470,7 @@ class StandaloneModelSyncCliTests(unittest.TestCase):
             {"modelFieldAdd", "updateModelTemplates", "updateModelStyling", "sync"}
             & set(client.actions)
         )
+        self.assertTrue(model_lock_is_available())
 
     def test_sync_cli_uses_the_same_nonblocking_lock_as_import(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -388,11 +495,7 @@ class ImportModelContractCliTests(unittest.TestCase):
     def test_missing_model_is_created_and_verified_before_audio(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             events: list[str] = []
             client = MissingModelClient(events)
@@ -430,11 +533,7 @@ class ImportModelContractCliTests(unittest.TestCase):
     def test_crlf_and_terminal_newlines_are_strictly_equivalent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             fields = json.loads(model_spec.read_text(encoding="utf-8"))["fields"]
             client = MissingModelClient()
@@ -469,11 +568,7 @@ class ImportModelContractCliTests(unittest.TestCase):
     def test_compatible_update_adds_fields_then_updates_only_changed_content(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             fields = json.loads(model_spec.read_text(encoding="utf-8"))["fields"]
             target_front = (root / "front.html").read_text(encoding="utf-8")
@@ -526,11 +621,7 @@ class ImportModelContractCliTests(unittest.TestCase):
     def test_each_component_difference_is_reported_by_strict_content_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             fields = json.loads(model_spec.read_text(encoding="utf-8"))["fields"]
             targets = {
@@ -566,11 +657,7 @@ class ImportModelContractCliTests(unittest.TestCase):
     def test_incompatible_model_is_blocked_with_count_and_migration_steps(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             fields = json.loads(model_spec.read_text(encoding="utf-8"))["fields"]
             client = MissingModelClient()
@@ -607,15 +694,12 @@ class ImportModelContractCliTests(unittest.TestCase):
             & set(client.actions)
         )
         prepare_audio.assert_not_called()
+        self.assertTrue(model_lock_is_available())
 
     def test_shared_lock_conflict_stops_before_model_or_audio_work(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             client = MissingModelClient()
             model_contract.MODEL_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -646,11 +730,7 @@ class ImportModelContractCliTests(unittest.TestCase):
     def test_no_ensure_model_flag_is_rejected_before_connecting_or_audio(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             client = MissingModelClient()
 
@@ -677,11 +757,7 @@ class ImportModelContractCliTests(unittest.TestCase):
     def test_invalid_model_spec_stops_before_connecting_or_audio(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             invalid_spec = root / "invalid.json"
             invalid_spec.write_text("{}", encoding="utf-8")
             client = MissingModelClient()
@@ -706,14 +782,44 @@ class ImportModelContractCliTests(unittest.TestCase):
         self.assertEqual(client.actions, [])
         prepare_audio.assert_not_called()
 
+    def test_model_spec_missing_context_anchor_field_stops_before_connecting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_path = write_import_input(root)
+            model_spec = write_model_spec(root)
+            payload = json.loads(model_spec.read_text(encoding="utf-8"))
+            payload["fields"].remove("发音")
+            model_spec.write_text(
+                json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+            )
+            client = MissingModelClient()
+
+            with mock.patch.object(
+                ankiconnect_import, "prepare_all_audio"
+            ) as prepare_audio:
+                code, stdout, stderr = run_import_cli(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--model-spec",
+                        str(model_spec),
+                    ],
+                    client,
+                )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(stdout, "")
+        self.assertIn(
+            "model spec fields are missing required Context Anchor fields: 发音",
+            stderr,
+        )
+        self.assertEqual(client.actions, [])
+        prepare_audio.assert_not_called()
+
     def test_unreadable_template_file_stops_before_connecting_or_audio(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             (root / "front.html").write_bytes(b"\xff")
             client = MissingModelClient()
@@ -740,11 +846,7 @@ class ImportModelContractCliTests(unittest.TestCase):
     def test_partial_model_update_failure_is_reported_without_rollback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             fields = json.loads(model_spec.read_text(encoding="utf-8"))["fields"]
             target_front = (root / "front.html").read_text(encoding="utf-8")
@@ -758,6 +860,8 @@ class ImportModelContractCliTests(unittest.TestCase):
                 css=target_css + "changed",
             )
             client.fail_action = "updateModelStyling"
+            secret_error = f"request echoed CSS: {target_css}"
+            client.fail_error = ankiconnect_import.AnkiImportError(secret_error)
 
             with mock.patch.object(
                 ankiconnect_import, "prepare_all_audio"
@@ -775,22 +879,20 @@ class ImportModelContractCliTests(unittest.TestCase):
 
         self.assertEqual(code, 1)
         self.assertIn("Model update: completed=templates failed=css", stdout)
-        self.assertIn("model update failed at css", stderr)
+        self.assertIn("model update failed at css: error_type=AnkiImportError", stderr)
+        self.assertNotIn(secret_error, stdout + stderr)
         self.assertEqual(
             client.templates["Context Anchor"]["Front"], target_front
         )
         self.assertNotEqual(client.css, target_css)
         self.assertNotIn("sync", client.actions)
         prepare_audio.assert_not_called()
+        self.assertTrue(model_lock_is_available())
 
     def test_post_update_verification_failure_stops_before_audio(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             fields = json.loads(model_spec.read_text(encoding="utf-8"))["fields"]
             client = MissingModelClient()
@@ -821,15 +923,12 @@ class ImportModelContractCliTests(unittest.TestCase):
         self.assertIn("model verification failed", stderr)
         self.assertNotIn("sync", client.actions)
         prepare_audio.assert_not_called()
+        self.assertTrue(model_lock_is_available())
 
     def test_verified_model_update_remains_when_audio_later_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             fields = json.loads(model_spec.read_text(encoding="utf-8"))["fields"]
             target_front = (root / "front.html").read_text(encoding="utf-8")
@@ -870,15 +969,12 @@ class ImportModelContractCliTests(unittest.TestCase):
             client.templates["Context Anchor"]["Front"], target_front
         )
         self.assertNotIn("sync", client.actions)
+        self.assertTrue(model_lock_is_available())
 
     def test_successful_import_syncs_only_after_model_and_audio_steps(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             events: list[str] = []
             client = MissingModelClient(events)
@@ -911,15 +1007,137 @@ class ImportModelContractCliTests(unittest.TestCase):
         self.assertLess(events.index("createModel"), events.index("prepare_audio"))
         self.assertEqual(events[-1], "sync")
         self.assertIn("Triggered Anki sync.", stdout)
+        self.assertIn("addNote", client.actions)
+        self.assertEqual(len(client.notes), 1)
+        self.assertTrue(model_lock_is_available())
+
+    def test_note_write_failure_does_not_sync_and_releases_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_path = write_import_input(root)
+            model_spec = write_model_spec(root)
+            client = MissingModelClient()
+            client.fail_action = "addNote"
+            client.fail_error = ankiconnect_import.AnkiImportError(
+                "forced note write failure"
+            )
+
+            with (
+                mock.patch.object(
+                    ankiconnect_import, "reuse_existing_anki_audio"
+                ),
+                mock.patch.object(
+                    ankiconnect_import, "prepare_all_audio", return_value={}
+                ),
+            ):
+                code, stdout, stderr = run_import_cli(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--model-spec",
+                        str(model_spec),
+                    ],
+                    client,
+                )
+
+        self.assertEqual(code, 1)
+        self.assertIn("Model verify: status=exact", stdout)
+        self.assertIn("forced note write failure", stderr)
+        self.assertIn("addNote", client.actions)
+        self.assertNotIn("sync", client.actions)
+        self.assertTrue(model_lock_is_available())
+
+    def test_unexpected_note_exception_still_releases_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_path = write_import_input(root)
+            model_spec = write_model_spec(root)
+            client = MissingModelClient()
+            client.fail_action = "addNote"
+            client.fail_error = RuntimeError("unexpected note failure")
+
+            with (
+                mock.patch.object(
+                    ankiconnect_import, "reuse_existing_anki_audio"
+                ),
+                mock.patch.object(
+                    ankiconnect_import, "prepare_all_audio", return_value={}
+                ),
+                self.assertRaisesRegex(RuntimeError, "unexpected note failure"),
+            ):
+                run_import_cli(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--model-spec",
+                        str(model_spec),
+                    ],
+                    client,
+                )
+
+        self.assertNotIn("sync", client.actions)
+        self.assertTrue(model_lock_is_available())
+
+    def test_idempotent_encounter_still_updates_model_before_note_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_path = write_import_input(root, encounter_id="same-encounter")
+            model_spec = write_model_spec(root)
+            events: list[str] = []
+            client = MissingModelClient(events)
+
+            def prepare_audio(*_: object, **__: object) -> dict[str, Path]:
+                events.append("prepare_audio")
+                return {}
+
+            with (
+                mock.patch.object(
+                    ankiconnect_import, "reuse_existing_anki_audio"
+                ),
+                mock.patch.object(
+                    ankiconnect_import,
+                    "prepare_all_audio",
+                    side_effect=prepare_audio,
+                ),
+            ):
+                first_code, _first_stdout, first_stderr = run_import_cli(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--model-spec",
+                        str(model_spec),
+                        "--no-sync",
+                    ],
+                    client,
+                )
+                baseline = len(events)
+                client.templates["Context Anchor"]["Front"] = "old front"
+                second_code, second_stdout, second_stderr = run_import_cli(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--model-spec",
+                        str(model_spec),
+                        "--no-sync",
+                    ],
+                    client,
+                )
+
+        self.assertEqual(first_code, 0, first_stderr)
+        self.assertEqual(second_code, 0, second_stderr)
+        second_events = events[baseline:]
+        self.assertLess(
+            second_events.index("updateModelTemplates"),
+            second_events.index("prepare_audio"),
+        )
+        self.assertEqual(client.actions.count("addNote"), 1)
+        self.assertNotIn("updateNote", second_events)
+        self.assertIn("idempotent=1", second_stdout)
 
     def test_wrong_template_name_and_legacy_fields_are_both_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            input_path = root / "notes.json"
-            input_path.write_text(
-                json.dumps([{"word": "anchor", "learning_group": "learn"}]),
-                encoding="utf-8",
-            )
+            input_path = write_import_input(root)
             model_spec = write_model_spec(root)
             expected_fields = json.loads(model_spec.read_text(encoding="utf-8"))[
                 "fields"

@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
+from context_anchor import CONTEXT_ANCHOR_FIELDS
+
 
 CONTEXT_ANCHOR_TEMPLATE = "Context Anchor"
 LEGACY_TRVS_FIELDS = frozenset(
@@ -46,8 +48,9 @@ class ModelApplyError(ModelContractError):
     def __init__(self, completed: tuple[str, ...], failed: str, cause: Exception) -> None:
         self.completed = completed
         self.failed = failed
+        self.error_type = type(cause).__name__
         super().__init__(
-            f"model update failed at {failed}: {cause}"
+            f"model update failed at {failed}: error_type={self.error_type}"
         )
 
 
@@ -175,6 +178,20 @@ def load_model_spec(path: Path, model_name: str) -> ModelSpec:
     ):
         raise ModelContractError(
             "model spec fields must be a non-empty list of unique strings"
+        )
+    missing_contract_fields = [
+        field for field in CONTEXT_ANCHOR_FIELDS if field not in raw_fields
+    ]
+    if missing_contract_fields:
+        raise ModelContractError(
+            "model spec fields are missing required Context Anchor fields: "
+            + ", ".join(missing_contract_fields)
+        )
+    legacy_spec_fields = sorted(set(raw_fields) & LEGACY_TRVS_FIELDS)
+    if legacy_spec_fields:
+        raise ModelContractError(
+            "model spec fields contain legacy fields: "
+            + ", ".join(legacy_spec_fields)
         )
 
     raw_templates = payload.get("card_templates")
