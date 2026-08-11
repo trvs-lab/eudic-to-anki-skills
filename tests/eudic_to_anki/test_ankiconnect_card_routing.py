@@ -4,6 +4,8 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
+
+from .fixtures import INFLICT_WORD_FAMILY
 from typing import Any
 
 
@@ -82,10 +84,7 @@ def note(
         "pronunciation": "/ɪnˈflɪkt/",
         "meaning": ["vt. 使遭受；造成"],
         "english_definition": "to make someone suffer something unpleasant",
-        "word_family": (
-            "拆解：in-「在……上」+ flict「打击」→ inflict「v. 使遭受；造成」\n"
-            "联想：conflict「n. 冲突」、afflict「v. 使痛苦」"
-        ),
+        "word_family": INFLICT_WORD_FAMILY,
         "source_context": raw,
         "card_sentence": raw or "Criticism can inflict lasting harm on a child.",
         "sentence_origin": "source" if raw else "generated",

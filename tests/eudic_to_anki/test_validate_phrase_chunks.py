@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from .fixtures import INFLICT_WORD_FAMILY
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "skills" / "eudic-to-anki"
@@ -20,10 +22,7 @@ def valid_note(**overrides: object) -> dict[str, object]:
         "part_of_speech": "vt.",
         "meaning": ["vt. 使遭受；造成"],
         "english_definition": "to make someone suffer something unpleasant",
-        "word_family": (
-            "拆解：in-「在……上」+ flict「打击」→ inflict「v. 使遭受；造成」\n"
-            "联想：conflict「n. 冲突」、afflict「v. 使痛苦」"
-        ),
+        "word_family": INFLICT_WORD_FAMILY,
         "source_context": "The storm inflicted serious damage on the town.",
         "card_sentence": "The storm inflicted serious damage on the town.",
         "sentence_origin": "source",
@@ -182,6 +181,67 @@ class ValidateContextAnchorTests(unittest.TestCase):
                     result.stderr,
                 )
 
+    def test_word_family_rejects_labeled_placeholders(self) -> None:
+        result = self.run_validator(
+            valid_note(word_family="拆解：不可拆分\n联想：无")
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "omit word_family instead of using placeholder content",
+            result.stderr,
+        )
+
+    def test_word_family_ignores_separators_inside_chinese_meanings(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                word_family=(
+                    "拆解：circum-「环绕、四周」+ spect「看」→ "
+                    "circumspect「adj. 谨慎的、考虑周全的」\n"
+                    "联想：inspect「v. 检查、审视」、"
+                    "prospect「n. 前景、可能性」、"
+                    "retrospect「n. 回顾、追溯」"
+                )
+            )
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_each_word_family_association_needs_pos_and_chinese_meaning(self) -> None:
+        association_lines = (
+            "联想：ascent、descend",
+            "联想：ascent「上升」",
+            "联想：ascent「n. rise」",
+        )
+        for association_line in association_lines:
+            with self.subTest(association_line=association_line):
+                result = self.run_validator(
+                    valid_note(
+                        word_family=(
+                            "拆解：ascend「v. 上升」→ ascension「n. 上升」\n"
+                            f"{association_line}"
+                        )
+                    )
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    "each word_family association must include POS and Chinese meaning",
+                    result.stderr,
+                )
+
+    def test_word_family_target_needs_pos_and_chinese_meaning(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                word_family=(
+                    "拆解：ascend「v. 上升」→ ascension\n"
+                    "联想：ascent「n. 上升」"
+                )
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "word_family target must include POS and Chinese meaning",
+            result.stderr,
+        )
+
     def test_word_family_requires_breakdown_content(self) -> None:
         result = self.run_validator(
             valid_note(word_family="拆解：\n联想：ascent「n. 上升」")
@@ -288,6 +348,16 @@ class ValidateContextAnchorTests(unittest.TestCase):
                 )
             )
             self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class WordCoachPromptContractTests(unittest.TestCase):
+    def test_prompt_covers_semantic_morphology_failures(self) -> None:
+        prompt = (SKILL / "references" / "word-coach-json-prompt.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("只列 `ascent, descend`", prompt)
+        self.assertIn("`take a toll on` 等固定短语虚构词根词缀", prompt)
+        self.assertIn("低置信度词源", prompt)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from .fixtures import INFLICT_WORD_FAMILY
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "skills" / "eudic-to-anki"
@@ -20,10 +22,7 @@ def coach_note(word: str = "inflict", **overrides: object) -> dict[str, object]:
         "part_of_speech": "vt.",
         "meaning": ["vt. 使遭受；造成"],
         "english_definition": "to make someone suffer something unpleasant",
-        "word_family": (
-            "拆解：in-「在……上」+ flict「打击」→ inflict「v. 使遭受；造成」\n"
-            "联想：conflict「n. 冲突」、afflict「v. 使痛苦」"
-        ),
+        "word_family": INFLICT_WORD_FAMILY,
         "card_sentence": "The storm inflicted serious damage on the town.",
         "sentence_origin": "source",
         "source_chunk": "inflicted serious damage on",

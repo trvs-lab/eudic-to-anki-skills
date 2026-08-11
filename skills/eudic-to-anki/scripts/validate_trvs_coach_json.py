@@ -22,6 +22,18 @@ MOJIBAKE_MARKERS = ("Ã", "Â", "Ð", "Ñ")
 EN_WORD_RE = re.compile(r"[A-Za-z]+(?:[-'][A-Za-z]+)?")
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 HTML_TAG_RE = re.compile(r"</?[A-Za-z][^>]*>")
+WORD_FAMILY_PLACEHOLDERS = {"-", "无", "不可拆分", "无构词线索", "无联想"}
+WORD_FAMILY_POS_MARKERS = (
+    "n.",
+    "v.",
+    "adj.",
+    "adv.",
+    "prep.",
+    "phr.",
+    "phr.v.",
+    "vt.",
+    "vi.",
+)
 IMPORTABLE_REQUIRED_KEYS = (
     "word",
     "pronunciation",
@@ -94,6 +106,45 @@ def _contains_target(sentence: str, word: str) -> bool:
 def _text(note: dict[str, Any], key: str) -> str:
     value = note.get(key)
     return value.strip() if isinstance(value, str) else ""
+
+
+def _split_word_family_associations(text: str) -> list[str]:
+    associations: list[str] = []
+    current: list[str] = []
+    annotation_depth = 0
+    for character in text:
+        if character == "「":
+            annotation_depth += 1
+        elif character == "」" and annotation_depth:
+            annotation_depth -= 1
+        if character == "、" and annotation_depth == 0:
+            associations.append("".join(current).strip())
+            current = []
+        else:
+            current.append(character)
+    associations.append("".join(current).strip())
+    return associations
+
+
+def _annotation_has_pos_and_chinese_meaning(annotation: str) -> bool:
+    has_pos = any(
+        annotation.startswith(f"{marker} ") for marker in WORD_FAMILY_POS_MARKERS
+    )
+    return has_pos and CJK_RE.search(annotation) is not None
+
+
+def _text_has_pos_and_chinese_annotation(text: str) -> bool:
+    return any(
+        _annotation_has_pos_and_chinese_meaning(annotation.strip())
+        for annotation in re.findall(r"「([^」]+)」", text)
+    )
+
+
+def _association_has_pos_and_chinese_meaning(association: str) -> bool:
+    word, opening, remainder = association.partition("「")
+    if not word.strip() or not opening or not remainder.endswith("」"):
+        return False
+    return _annotation_has_pos_and_chinese_meaning(remainder[:-1].strip())
 
 
 def _is_complete_importable_note(note: dict[str, Any]) -> bool:
@@ -201,9 +252,10 @@ def _validate_note(note: dict[str, Any], index: int) -> list[str]:
         )
 
     word_family = _text(note, "word_family")
-    if word_family in {"-", "无"}:
+    if word_family in WORD_FAMILY_PLACEHOLDERS:
         errors.append(
-            f"note[{index}] word={word!r}: omit word_family instead of using a placeholder"
+            f"note[{index}] word={word!r}: "
+            "omit word_family instead of using placeholder content"
         )
     elif word_family and HTML_TAG_RE.search(word_family):
         errors.append(
@@ -235,14 +287,35 @@ def _validate_note(note: dict[str, Any], index: int) -> list[str]:
                     "word_family breakdown must not be empty"
                 )
             association_text = word_family_lines[1].removeprefix("联想：").strip()
-            associations = [
-                item.strip() for item in association_text.split("、") if item.strip()
-            ]
-            if not 1 <= len(associations) <= 3:
+            if (
+                breakdown_text in WORD_FAMILY_PLACEHOLDERS
+                or association_text in WORD_FAMILY_PLACEHOLDERS
+            ):
                 errors.append(
                     f"note[{index}] word={word!r}: "
-                    "word_family must contain 1-3 associations separated by 、"
+                    "omit word_family instead of using placeholder content"
                 )
+            else:
+                _, arrow, target_text = breakdown_text.rpartition("→")
+                if not arrow or not _text_has_pos_and_chinese_annotation(target_text):
+                    errors.append(
+                        f"note[{index}] word={word!r}: word_family target "
+                        "must include POS and Chinese meaning"
+                    )
+                associations = _split_word_family_associations(association_text)
+                if not 1 <= len(associations) <= 3 or not all(associations):
+                    errors.append(
+                        f"note[{index}] word={word!r}: "
+                        "word_family must contain 1-3 associations separated by 、"
+                    )
+                elif not all(
+                    _association_has_pos_and_chinese_meaning(item)
+                    for item in associations
+                ):
+                    errors.append(
+                        f"note[{index}] word={word!r}: each word_family "
+                        "association must include POS and Chinese meaning"
+                    )
 
     sentence = _text(note, "card_sentence")
     origin = _text(note, "sentence_origin")

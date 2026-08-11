@@ -6,6 +6,8 @@ import sys
 import unittest
 from pathlib import Path
 
+from .fixtures import INFLICT_WORD_FAMILY
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "skills" / "eudic-to-anki" / "scripts"
@@ -25,10 +27,7 @@ def source_note(**overrides: object) -> dict[str, object]:
         "pronunciation": "/ɪnˈflɪkt/",
         "meaning": ["vt. 使遭受；造成"],
         "english_definition": "to make someone suffer something unpleasant",
-        "word_family": (
-            "拆解：in-「在……上」+ flict「打击」→ inflict「v. 使遭受；造成」\n"
-            "联想：conflict「n. 冲突」、afflict「v. 使痛苦」"
-        ),
+        "word_family": INFLICT_WORD_FAMILY,
         "source_context": "The storm inflicted serious damage on the town.",
         "card_sentence": "The storm inflicted serious damage on the town.",
         "sentence_origin": "source",
@@ -56,8 +55,7 @@ class ContextAnchorFieldTests(unittest.TestCase):
         self.assertEqual(fields["来源词块"], "inflicted serious damage on")
         self.assertEqual(
             fields["词族构词"],
-            "拆解：in-「在……上」+ flict「打击」→ inflict「v. 使遭受；造成」\n"
-            "联想：conflict「n. 冲突」、afflict「v. 使痛苦」",
+            INFLICT_WORD_FAMILY,
         )
         self.assertEqual(fields["学习分组"], "learn")
         self.assertEqual(json.loads(fields["遇见记录"])[0]["origin"], "source")
