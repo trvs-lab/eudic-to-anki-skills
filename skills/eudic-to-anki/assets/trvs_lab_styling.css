@@ -1,4 +1,4 @@
-/* trvs-style-version: context-anchor-v1 */
+/* trvs-style-version: context-anchor-v2 */
 .card {
   --ink: rgba(20, 24, 32, 0.9);
   --muted: rgba(20, 24, 32, 0.58);
@@ -17,16 +17,22 @@
 
 .context-anchor-card { text-align: center; }
 .word-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
   padding: 0;
   border: 0;
   color: var(--ink);
   background: transparent;
-  font: 650 34px/1.2 Georgia, serif;
+  font-family: Georgia, serif !important;
+  font-size: 34px !important;
+  font-weight: 650 !important;
+  line-height: 1.2;
   cursor: pointer;
 }
 .word-button:active { color: var(--accent); }
 .word-audio { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
-.card-sentence { margin-top: 22px; font: 400 22px/1.55 Georgia, serif; }
+.card-sentence { width: fit-content; max-width: 100%; margin: 22px auto 0; font: 400 22px/1.55 Georgia, serif; text-align: left; }
 mark { color: inherit; background: transparent; font-weight: 700; text-decoration: underline; text-decoration-color: rgba(47, 111, 237, 0.45); text-underline-offset: 4px; }
 
 .answer-panel { margin-top: 26px; padding-top: 24px; border-top: 1px solid var(--line); }
@@ -35,6 +41,7 @@ mark { color: inherit; background: transparent; font-weight: 700; text-decoratio
 .answer-definition { margin-top: 14px; font: 19px/1.55 Georgia, serif; }
 .answer-row { display: grid; grid-template-columns: 86px 1fr; gap: 12px; margin-top: 18px; line-height: 1.55; }
 .answer-label { color: var(--muted); font-size: 13px; letter-spacing: 0.05em; }
+.word-family { margin-top: 18px; line-height: 1.55; white-space: pre-line; }
 .encounter-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 22px; color: var(--muted); font-size: 13px; }
 
 .nightMode .card { --ink: rgba(255,255,255,.9); --muted: rgba(255,255,255,.55); --line: rgba(255,255,255,.14); --accent: #8eb2ff; background: #1f1f1f; }

@@ -82,7 +82,10 @@ def note(
         "pronunciation": "/ɪnˈflɪkt/",
         "meaning": ["vt. 使遭受；造成"],
         "english_definition": "to make someone suffer something unpleasant",
-        "word_family": "in-（向内）+ flict（打击）",
+        "word_family": (
+            "拆解：in-「在……上」+ flict「打击」→ inflict「v. 使遭受；造成」\n"
+            "联想：conflict「n. 冲突」、afflict「v. 使痛苦」"
+        ),
         "source_context": raw,
         "card_sentence": raw or "Criticism can inflict lasting harm on a child.",
         "sentence_origin": "source" if raw else "generated",

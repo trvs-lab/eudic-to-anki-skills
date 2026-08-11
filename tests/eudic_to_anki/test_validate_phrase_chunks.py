@@ -20,7 +20,10 @@ def valid_note(**overrides: object) -> dict[str, object]:
         "part_of_speech": "vt.",
         "meaning": ["vt. 使遭受；造成"],
         "english_definition": "to make someone suffer something unpleasant",
-        "word_family": "in-（向内）+ flict（打击）",
+        "word_family": (
+            "拆解：in-「在……上」+ flict「打击」→ inflict「v. 使遭受；造成」\n"
+            "联想：conflict「n. 冲突」、afflict「v. 使痛苦」"
+        ),
         "source_context": "The storm inflicted serious damage on the town.",
         "card_sentence": "The storm inflicted serious damage on the town.",
         "sentence_origin": "source",
@@ -114,6 +117,109 @@ class ValidateContextAnchorTests(unittest.TestCase):
         )
         self.assertEqual(too_short.returncode, 1)
         self.assertIn("should contain 6-18 words", too_short.stderr)
+
+    def test_word_family_requires_two_labeled_lines(self) -> None:
+        result = self.run_validator(
+            valid_note(word_family="ascend v. 上升；晋升")
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "word_family must contain exactly two non-empty lines",
+            result.stderr,
+        )
+
+    def test_word_family_requires_breakdown_and_association_labels(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                word_family=(
+                    "构成：ascend「v. 上升」→ ascension「n. 上升」\n"
+                    "相关：ascent「n. 上升」"
+                )
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "word_family lines must start with 拆解： and 联想：",
+            result.stderr,
+        )
+
+    def test_word_family_rejects_authored_html(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                word_family=(
+                    "<strong>拆解：</strong>ascend「v. 上升」→ "
+                    "ascension「n. 上升」\n联想：ascent「n. 上升」"
+                )
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "word_family must be plain text without HTML",
+            result.stderr,
+        )
+
+    def test_word_family_requires_one_to_three_associations(self) -> None:
+        cases = (
+            "联想：",
+            (
+                "联想：ascent「n. 上升」、descend「v. 下降」、"
+                "transcend「v. 超越」、condescend「v. 屈尊」"
+            ),
+        )
+        for association_line in cases:
+            with self.subTest(association_line=association_line):
+                result = self.run_validator(
+                    valid_note(
+                        word_family=(
+                            "拆解：ascend「v. 上升」→ ascension「n. 上升」\n"
+                            f"{association_line}"
+                        )
+                    )
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    "word_family must contain 1-3 associations separated by 、",
+                    result.stderr,
+                )
+
+    def test_word_family_requires_breakdown_content(self) -> None:
+        result = self.run_validator(
+            valid_note(word_family="拆解：\n联想：ascent「n. 上升」")
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("word_family breakdown must not be empty", result.stderr)
+
+    def test_accepts_recommended_word_family_examples(self) -> None:
+        examples = (
+            (
+                "拆解：ascend「v. 上升；晋升」→ ascension「n. 上升；晋升」"
+                "（-ion「名词后缀」，词干变体为 ascens-；"
+                "scend/scand「攀登、上升」）\n"
+                "联想：ascent「n. 上升；攀登」、descend「v. 下降；下去」"
+            ),
+            (
+                "拆解：ir-「不」+ reverse「v. 逆转；颠倒」+ "
+                "-ible「能够……的」→ irreversible「adj. 不可逆转的」\n"
+                "联想：reversible「adj. 可逆的」、"
+                "reversibility「n. 可逆性」"
+            ),
+            (
+                "拆解：circum-「环绕、四周」+ spect「看」→ "
+                "circumspect「adj. 谨慎的；考虑周全的」，字面是「向四周看」\n"
+                "联想：inspect「v. 检查」、prospect「n. 前景」、"
+                "retrospect「n. 回顾」"
+            ),
+            (
+                "拆解：bene-「好、善」+ vol/volent「意愿、希望」→ "
+                "benevolent「adj. 仁慈的；乐善好施的」\n"
+                "联想：benevolence「n. 仁慈；善意」、"
+                "malevolent「adj. 恶意的」"
+            ),
+        )
+        for word_family in examples:
+            with self.subTest(word_family=word_family):
+                result = self.run_validator(valid_note(word_family=word_family))
+                self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_source_chunk_is_optional_but_must_be_traceable(self) -> None:
         omitted = self.run_validator(

@@ -69,6 +69,19 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         ):
             self.assertNotIn("{{" + hidden_field + "}}", front)
 
+    def test_front_typography_is_stable_across_anki_platforms(self) -> None:
+        css = (ASSETS / self.spec["css_path"]).read_text(encoding="utf-8")
+        word_button = css.split(".word-button {", 1)[1].split("}", 1)[0]
+        sentence = css.split(".card-sentence {", 1)[1].split("}", 1)[0]
+        self.assertIn("\n  appearance: none", word_button)
+        self.assertIn("-webkit-appearance: none", word_button)
+        self.assertIn("font-family: Georgia, serif !important", word_button)
+        self.assertIn("font-size: 34px !important", word_button)
+        self.assertIn("font-weight: 650 !important", word_button)
+        self.assertIn("width: fit-content", sentence)
+        self.assertIn("max-width: 100%", sentence)
+        self.assertIn("text-align: left", sentence)
+
     def test_back_is_unfolded_and_follows_information_order(self) -> None:
         template = self.spec["card_templates"][0]
         back = (ASSETS / template["BackPath"]).read_text(encoding="utf-8")
@@ -89,8 +102,19 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertNotIn("{{学习分组}}", back)
         self.assertNotIn("priority-marker", back)
         self.assertNotIn("Chunk Recall", back)
+        self.assertNotIn(
+            '<span class="answer-label">词族构词</span>',
+            back,
+        )
+        self.assertIn('<div class="word-family">{{词族构词}}</div>', back)
         self.assertIn('id="latest-encounter"', back)
         self.assertIn("latest.textContent = match[0]", back)
+
+    def test_word_family_uses_full_width_and_preserves_authored_lines(self) -> None:
+        css = (ASSETS / self.spec["css_path"]).read_text(encoding="utf-8")
+        self.assertIn(".word-family", css)
+        self.assertIn("white-space: pre-line", css)
+        self.assertNotIn(".answer-row.word-family", css)
 
     def test_model_referenced_assets_exist(self) -> None:
         for template in self.spec["card_templates"]:

@@ -21,6 +21,7 @@ REPLACEMENT = "\ufffd"
 MOJIBAKE_MARKERS = ("Ã", "Â", "Ð", "Ñ")
 EN_WORD_RE = re.compile(r"[A-Za-z]+(?:[-'][A-Za-z]+)?")
 CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+HTML_TAG_RE = re.compile(r"</?[A-Za-z][^>]*>")
 IMPORTABLE_REQUIRED_KEYS = (
     "word",
     "pronunciation",
@@ -204,6 +205,44 @@ def _validate_note(note: dict[str, Any], index: int) -> list[str]:
         errors.append(
             f"note[{index}] word={word!r}: omit word_family instead of using a placeholder"
         )
+    elif word_family and HTML_TAG_RE.search(word_family):
+        errors.append(
+            f"note[{index}] word={word!r}: "
+            "word_family must be plain text without HTML"
+        )
+    elif word_family:
+        word_family_lines = [
+            line.strip() for line in word_family.splitlines() if line.strip()
+        ]
+        if len(word_family_lines) != 2:
+            errors.append(
+                f"note[{index}] word={word!r}: "
+                "word_family must contain exactly two non-empty lines"
+            )
+        elif not (
+            word_family_lines[0].startswith("拆解：")
+            and word_family_lines[1].startswith("联想：")
+        ):
+            errors.append(
+                f"note[{index}] word={word!r}: "
+                "word_family lines must start with 拆解： and 联想："
+            )
+        else:
+            breakdown_text = word_family_lines[0].removeprefix("拆解：").strip()
+            if not breakdown_text:
+                errors.append(
+                    f"note[{index}] word={word!r}: "
+                    "word_family breakdown must not be empty"
+                )
+            association_text = word_family_lines[1].removeprefix("联想：").strip()
+            associations = [
+                item.strip() for item in association_text.split("、") if item.strip()
+            ]
+            if not 1 <= len(associations) <= 3:
+                errors.append(
+                    f"note[{index}] word={word!r}: "
+                    "word_family must contain 1-3 associations separated by 、"
+                )
 
     sentence = _text(note, "card_sentence")
     origin = _text(note, "sentence_origin")

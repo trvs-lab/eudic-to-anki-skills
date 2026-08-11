@@ -20,7 +20,10 @@ def coach_note(word: str = "inflict", **overrides: object) -> dict[str, object]:
         "part_of_speech": "vt.",
         "meaning": ["vt. 使遭受；造成"],
         "english_definition": "to make someone suffer something unpleasant",
-        "word_family": "in-（向内）+ flict（打击）",
+        "word_family": (
+            "拆解：in-「在……上」+ flict「打击」→ inflict「v. 使遭受；造成」\n"
+            "联想：conflict「n. 冲突」、afflict「v. 使痛苦」"
+        ),
         "card_sentence": "The storm inflicted serious damage on the town.",
         "sentence_origin": "source",
         "source_chunk": "inflicted serious damage on",
@@ -191,7 +194,12 @@ class MergeContextAnchorTests(unittest.TestCase):
                             "part_of_speech": "vt.",
                             "meaning": ["vt. 扭曲；曲解"],
                             "english_definition": "to change something so it is no longer accurate",
-                            "word_family": "dis-（分开）+ tort（扭）",
+                            "word_family": (
+                                "拆解：dis-「分开、偏离」+ tort「扭」→ "
+                                "distort「v. 扭曲；曲解」\n"
+                                "联想：distortion「n. 扭曲；曲解」、"
+                                "contort「v. 扭曲」"
+                            ),
                             "card_sentence": "Fear can distort your judgment.",
                             "sentence_origin": "source",
                             "source_chunk": "distort your judgment",

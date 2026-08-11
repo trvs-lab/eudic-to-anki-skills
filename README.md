@@ -10,7 +10,9 @@ An Agent Skill that exports vocabulary encounters from Eudic and imports one-car
 - Keeps one Anki note and one card per normalized word or phrase.
 - Uses a clean source sentence, minimally adapts a noisy one, or generates a practical sentence when no source exists.
 - Shows only the word and sentence on the front; tapping the word plays pronunciation audio.
+- Keeps the target word size stable across Anki platforms and left-aligns text inside the centered sentence block.
 - Keeps the back unfolded and ordered by learning value, without classification markers.
+- Adds optional two-line morphology clues with POS-aware Chinese meanings and translated associations, without a separate section heading.
 - Manages `learn`, `defer`, and `skip` decks; invalid `reject` entries remain outside Anki.
 - Resets the single card for a distinct new encounter and does nothing for an identical encounter ID.
 - Uses Edge-TTS with one retry. A second failure aborts the import; system TTS is never used as a fallback.
