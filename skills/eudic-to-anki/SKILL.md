@@ -39,7 +39,7 @@ Resolve a relative range in the system local timezone as one inclusive start/end
 2. Run `bash scripts/check_env.sh`.
 3. Run the selected workflow's export and placeholder commands exactly. Preserve every encounter and its `category_id`、`category_name`、`add_time_utc`、`add_time_local` and `context_line`.
 4. Author coach JSON using `references/word-coach-json-prompt.md`, merge it with every placeholder row, then validate the resulting `<IMPORT_JSON>`.
-5. Preview `<IMPORT_JSON>` with `python3 scripts/ankiconnect_import.py --input <IMPORT_JSON> --deck words --create-deck --dry-run`.
+5. Preview `<IMPORT_JSON>` with `python3 scripts/ankiconnect_import.py --input <IMPORT_JSON> --deck words --create-deck --dry-run`. Confirm the model preflight is `create`, `update`, or `none`; stop on `blocked`.
 6. Import with required audio:
    `python3 scripts/ankiconnect_import.py --input <IMPORT_JSON> --deck words --create-deck --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text "{word}" --output "{output}" --voice "{voice}"'`
 7. After success, run `bash scripts/cleanup_import_artifacts.sh`.
@@ -79,7 +79,11 @@ When a card is already in one of the three managed decks, its current Anki deck 
 
 ## Model migration
 
-The legacy two-template `Chunk Anchor` / `Chunk Recall` model cannot be converted safely in place. If detected, stop. Tell the user to back up Anki, remove the legacy `TRVS-Lab` notes/note type, and rerun the import. Search by normalized word across the note type so legacy deck placement cannot create duplicates.
+Treat the bundled complete model spec as the source of truth. Before Edge-TTS or any deck, media, note, card, or sync write, acquire the shared nonblocking Anki lock and compare Front, Back, and CSS by SHA-256. Normalize only CRLF/LF and terminal newlines; every other HTML, JavaScript, CSS, or whitespace difference requires an update. Create a missing model automatically. Add missing required fields and overwrite changed template or styling content, then reread and verify the complete model before continuing. Preserve unknown extra fields and report them.
+
+The legacy two-template `Chunk Anchor` / `Chunk Recall` model, a wrong template name, or known legacy fields cannot be converted safely in place. If detected, stop. Tell the user to back up Anki, remove the legacy `TRVS-Lab` notes/note type, and rerun the import. Search by normalized word across the note type so legacy deck placement cannot create duplicates. Never bypass the model gate with `--no-ensure-model`.
+
+Use `python3 scripts/sync_trvs_lab_model.py --check` for a read-only model plan. Run the command without `--check` for a complete local create/update and strict verification. It does not trigger cloud sync unless `--sync` is explicit. Partial template-only or CSS-only synchronization is unsupported.
 
 ## Safety
 

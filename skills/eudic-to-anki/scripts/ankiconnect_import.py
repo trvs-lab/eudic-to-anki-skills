@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,18 @@ from context_anchor import (
     note_learning_group,
     parse_encounters,
 )
+from model_contract import (
+    ModelApplyError,
+    ModelContractError,
+    anki_operation_lock,
+    apply_model_plan,
+    emit_blocked,
+    emit_preflight,
+    emit_update,
+    inspect_model,
+    load_model_spec as load_strict_model_spec,
+    verify_model,
+)
 
 DEFAULT_ANKI_URL = "http://127.0.0.1:8765"
 DEFAULT_DECK = "words"
@@ -37,19 +50,7 @@ DEFAULT_MODEL = STRUCTURED_VOCAB_MODEL
 DEFAULT_AUDIO_FORMAT = "mp3"
 DEFAULT_AUDIO_VOICE = "en-US-GuyNeural"
 API_VERSION = 6
-CONTEXT_ANCHOR_TEMPLATE = "Context Anchor"
 SOUND_FIELD_RE = re.compile(r"^\[sound:([^\]\r\n]+)\]$")
-LEGACY_TRVS_FIELDS = {
-    "释义",
-    "词根",
-    "例句",
-    "学习标记",
-    "目标短语块",
-    "短语块锚点",
-    "短语块例句",
-    "短语块挖空",
-    "常用搭配",
-}
 TRVS_REQUIRED_FIELDS = (
     "单词",
     "规范词形",
@@ -126,7 +127,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--deck", default=DEFAULT_DECK, help="Managed deck root.")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--model-spec", default=str(DEFAULT_MODEL_SPEC_PATH))
-    parser.add_argument("--no-ensure-model", action="store_true")
+    parser.add_argument(
+        "--no-ensure-model",
+        action="store_true",
+        help="Deprecated compatibility flag; rejected because model verification is mandatory.",
+    )
     parser.add_argument(
         "--audio-provider",
         choices=["none", "existing", "command"],
@@ -189,72 +194,6 @@ def load_notes(path: Path) -> list[dict[str, Any]]:
     raise AnkiImportError("Unsupported input format. Use JSON, CSV, or TSV.")
 
 
-def load_model_spec(path: Path, model_name: str) -> dict[str, Any]:
-    if not path.is_file():
-        raise AnkiImportError(f"Model spec not found: {path}")
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    payload["model_name"] = model_name
-    base = path.parent
-    payload["css"] = (base / payload["css_path"]).read_text(encoding="utf-8")
-    templates: list[dict[str, str]] = []
-    for raw in payload["card_templates"]:
-        template = dict(raw)
-        template["Front"] = (base / template.pop("FrontPath")).read_text(
-            encoding="utf-8"
-        )
-        template["Back"] = (base / template.pop("BackPath")).read_text(encoding="utf-8")
-        templates.append(template)
-    payload["card_templates"] = templates
-    return payload
-
-
-def _template_map_from_spec(spec: dict[str, Any]) -> dict[str, dict[str, str]]:
-    return {
-        str(template["Name"]): {
-            "Front": str(template.get("Front") or ""),
-            "Back": str(template.get("Back") or ""),
-        }
-        for template in spec.get("card_templates", [])
-    }
-
-
-def _model_templates_need_update(templates: Any) -> bool:
-    if not isinstance(templates, dict) or set(templates) != {CONTEXT_ANCHOR_TEMPLATE}:
-        return True
-    template = templates[CONTEXT_ANCHOR_TEMPLATE] or {}
-    front = str(template.get("Front") or "")
-    back = str(template.get("Back") or "")
-    return not (
-        "{{单词}}" in front
-        and "{{卡片例句}}" in front
-        and "playAudio" in front
-        and all(
-            f"{{{{{field}}}}}" in back
-            for field in (
-                "语境释义",
-                "音标",
-                "英英",
-                "来源词块",
-                "词块释义",
-                "词族构词",
-                "历史语境",
-                "遇见次数",
-                "最近遇见",
-            )
-        )
-        and "{{学习分组}}" not in back
-    )
-
-
-def _model_css_needs_update(styling: Any) -> bool:
-    css = (
-        str(styling.get("css") or "")
-        if isinstance(styling, dict)
-        else str(styling or "")
-    )
-    return "trvs-style-version: context-anchor-v1" not in css
-
-
 def _migration_error(
     model_name: str, issues: list[str] | None = None
 ) -> AnkiImportError:
@@ -266,67 +205,6 @@ def _migration_error(
         "Export a backup, delete the legacy TRVS-Lab notes/note type, then rerun the "
         "import to create the one-card Context Anchor model."
     )
-
-
-def inspect_model_issues(client: AnkiConnectClient, model_name: str) -> list[str]:
-    """Return read-only migration issues for an existing model."""
-    models = client.invoke("modelNames") or []
-    if model_name not in models:
-        return []
-    templates = client.invoke("modelTemplates", modelName=model_name) or {}
-    names = set(templates) if isinstance(templates, dict) else set()
-    if names != {CONTEXT_ANCHOR_TEMPLATE}:
-        rendered = ", ".join(sorted(names)) or "none"
-        return [f"card templates are {rendered}, expected {CONTEXT_ANCHOR_TEMPLATE}"]
-    fields = set(client.invoke("modelFieldNames", modelName=model_name) or [])
-    legacy_fields = sorted(fields & LEGACY_TRVS_FIELDS)
-    if legacy_fields:
-        return [f"legacy fields remain: {', '.join(legacy_fields)}"]
-    return []
-
-
-def assert_model_migration_safe(client: AnkiConnectClient, model_name: str) -> None:
-    issues = inspect_model_issues(client, model_name)
-    if issues:
-        raise _migration_error(model_name, issues)
-
-
-def ensure_model(
-    client: AnkiConnectClient,
-    model_name: str,
-    *,
-    ensure_if_missing: bool,
-    model_spec_path: Path,
-) -> None:
-    models = client.invoke("modelNames") or []
-    spec = load_model_spec(model_spec_path, model_name)
-    if model_name not in models:
-        if not ensure_if_missing:
-            raise AnkiImportError(f"Anki note type not found: {model_name}")
-        client.invoke(
-            "createModel",
-            modelName=model_name,
-            inOrderFields=spec["fields"],
-            cardTemplates=spec["card_templates"],
-            css=spec["css"],
-        )
-        return
-    assert_model_migration_safe(client, model_name)
-    fields = client.invoke("modelFieldNames", modelName=model_name) or []
-    for field in spec["fields"]:
-        if field not in fields:
-            client.invoke("modelFieldAdd", modelName=model_name, fieldName=field)
-    templates = client.invoke("modelTemplates", modelName=model_name)
-    if _model_templates_need_update(templates):
-        client.invoke(
-            "updateModelTemplates",
-            model={"name": model_name, "templates": _template_map_from_spec(spec)},
-        )
-    styling = client.invoke("modelStyling", modelName=model_name)
-    if _model_css_needs_update(styling):
-        client.invoke(
-            "updateModelStyling", model={"name": model_name, "css": spec["css"]}
-        )
 
 
 def managed_deck_name(base_deck: str, group: str) -> str:
@@ -896,13 +774,18 @@ def preview_counts(notes: list[dict[str, Any]]) -> dict[str, int]:
     }
 
 
+def _cleanup_generated_audio(paths: list[Path]) -> None:
+    for path in paths:
+        path.unlink(missing_ok=True)
+
+
 def main() -> int:
     generated_audio_to_clean: list[Path] = []
     try:
         args = parse_args()
-        client = AnkiConnectClient(args.anki_url)
-        version = client.invoke("version")
         if args.ping and not args.input:
+            client = AnkiConnectClient(args.anki_url)
+            version = client.invoke("version")
             print(f"AnkiConnect is reachable at {args.anki_url} (version {version}).")
             return 0
         if not args.input:
@@ -923,6 +806,11 @@ def main() -> int:
             raise AnkiImportError(
                 "Context Anchor enforces one note per normalized word; duplicates cannot be enabled."
             )
+        if args.no_ensure_model:
+            raise AnkiImportError(
+                "--no-ensure-model is no longer supported; every Context Anchor import "
+                "must strictly verify the TRVS-Lab model."
+            )
         if args.audio_format.lstrip(".").casefold() != "mp3":
             raise AnkiImportError(
                 "Context Anchor audio must use MP3; set --audio-format mp3."
@@ -934,14 +822,58 @@ def main() -> int:
         if not notes:
             raise AnkiImportError("Input did not contain notes.")
 
-        model_issues = inspect_model_issues(client, args.model)
-        if args.dry_run:
-            print(f"Input preview: {_summary_text(preview_counts(notes))}")
-            if model_issues:
-                print(f"Model issues: count={len(model_issues)}")
-                for issue in model_issues:
-                    print(f"  - {issue}")
-                return 1
+        strict_spec = load_strict_model_spec(Path(args.model_spec), args.model)
+        with ExitStack() as stack:
+            stack.enter_context(anki_operation_lock())
+            stack.callback(_cleanup_generated_audio, generated_audio_to_clean)
+            client = AnkiConnectClient(args.anki_url)
+            client.invoke("version")
+            model_plan = inspect_model(client, strict_spec)
+            emit_preflight(model_plan)
+            if args.dry_run:
+                print(f"Input preview: {_summary_text(preview_counts(notes))}")
+                if model_plan.action == "blocked":
+                    emit_blocked(model_plan)
+                    return 1
+                summary = upsert_context_anchor_notes(
+                    client,
+                    notes,
+                    base_deck=args.deck,
+                    model=args.model,
+                    global_tags=args.tag,
+                    preserve_progress_on_update=args.preserve_progress_on_update,
+                    require_audio=False,
+                    dry_run=True,
+                )
+                print(f"Import preview: {_summary_text(summary)}")
+                return 0
+
+            if model_plan.action == "blocked":
+                emit_blocked(model_plan)
+                raise ModelContractError(
+                    "the existing TRVS-Lab model requires the reported manual migration"
+                )
+            try:
+                completed_model_updates = apply_model_plan(client, model_plan)
+            except ModelApplyError as exc:
+                emit_update(exc.completed, exc.failed)
+                raise
+            emit_update(completed_model_updates)
+            verify_model(client, strict_spec)
+            reuse_existing_anki_audio(client, notes, model=args.model)
+            prepared = prepare_all_audio(
+                notes,
+                provider=args.audio_provider,
+                command_template=args.audio_command,
+                audio_dir=Path(args.audio_dir),
+                audio_format=args.audio_format,
+                voice=args.audio_voice,
+            )
+            if args.audio_provider == "command":
+                generated_audio_to_clean.extend(prepared.values())
+            for deck in managed_decks(args.deck):
+                ensure_deck(client, deck, args.create_deck)
+            upload_prepared_audio(client, notes, prepared, audio_format=args.audio_format)
             summary = upsert_context_anchor_notes(
                 client,
                 notes,
@@ -949,55 +881,21 @@ def main() -> int:
                 model=args.model,
                 global_tags=args.tag,
                 preserve_progress_on_update=args.preserve_progress_on_update,
-                require_audio=False,
-                dry_run=True,
+                require_audio=True,
             )
-            print(f"Import preview: {_summary_text(summary)}")
-            print("Model issues: count=0")
+            print(f"Context Anchor import: {_summary_text(summary)}")
+            if not args.no_sync:
+                client.invoke("sync")
+                print("Triggered Anki sync.")
             return 0
-
-        if model_issues:
-            raise _migration_error(args.model, model_issues)
-        reuse_existing_anki_audio(client, notes, model=args.model)
-        prepared = prepare_all_audio(
-            notes,
-            provider=args.audio_provider,
-            command_template=args.audio_command,
-            audio_dir=Path(args.audio_dir),
-            audio_format=args.audio_format,
-            voice=args.audio_voice,
-        )
-        if args.audio_provider == "command":
-            generated_audio_to_clean = list(prepared.values())
-        ensure_model(
-            client,
-            args.model,
-            ensure_if_missing=not args.no_ensure_model,
-            model_spec_path=Path(args.model_spec),
-        )
-        for deck in managed_decks(args.deck):
-            ensure_deck(client, deck, args.create_deck)
-        upload_prepared_audio(client, notes, prepared, audio_format=args.audio_format)
-        summary = upsert_context_anchor_notes(
-            client,
-            notes,
-            base_deck=args.deck,
-            model=args.model,
-            global_tags=args.tag,
-            preserve_progress_on_update=args.preserve_progress_on_update,
-            require_audio=True,
-        )
-        print(f"Context Anchor import: {_summary_text(summary)}")
-        if not args.no_sync:
-            client.invoke("sync")
-            print("Triggered Anki sync.")
-        return 0
-    except (AnkiImportError, ValueError, json.JSONDecodeError) as exc:
+    except (
+        AnkiImportError,
+        ModelContractError,
+        ValueError,
+        json.JSONDecodeError,
+    ) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
-    finally:
-        for path in generated_audio_to_clean:
-            path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

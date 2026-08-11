@@ -217,6 +217,28 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["python3", "scripts/sync_trvs_lab_model.py"],
+    decision = "allow",
+    justification = "Allow strict TRVS-Lab model checks and complete synchronization from skill root.",
+    match = [
+        "python3 scripts/sync_trvs_lab_model.py --check",
+        "python3 scripts/sync_trvs_lab_model.py",
+        "python3 scripts/sync_trvs_lab_model.py --sync",
+    ],
+)
+
+prefix_rule(
+    pattern = ["python3", "<HOME>/.agents/skills/eudic-to-anki/scripts/sync_trvs_lab_model.py"],
+    decision = "allow",
+    justification = "Allow strict TRVS-Lab model checks and complete synchronization with an absolute installed-skill path.",
+    match = [
+        "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/sync_trvs_lab_model.py --check",
+        "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/sync_trvs_lab_model.py",
+        "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/sync_trvs_lab_model.py --sync",
+    ],
+)
+
+prefix_rule(
     pattern = ["python3", "scripts/edge_tts_runner.py"],
     decision = "allow",
     justification = "Allow direct Edge-TTS probe/generation from skill root.",

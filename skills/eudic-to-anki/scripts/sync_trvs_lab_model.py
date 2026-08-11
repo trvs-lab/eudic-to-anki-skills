@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Sync the bundled TRVS-Lab Anki note type templates via AnkiConnect."""
+"""Check or fully synchronize the strict TRVS-Lab model contract."""
 
 from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
 
 from ankiconnect_import import (
     DEFAULT_ANKI_URL,
@@ -14,16 +13,26 @@ from ankiconnect_import import (
     STRUCTURED_VOCAB_MODEL,
     AnkiConnectClient,
     AnkiImportError,
-    assert_model_migration_safe,
+)
+from model_contract import (
+    ModelApplyError,
+    ModelContractError,
+    anki_operation_lock,
+    apply_model_plan,
+    emit_blocked,
+    emit_preflight,
+    emit_update,
+    inspect_model,
     load_model_spec,
+    verify_model,
 )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Create or update the one-card TRVS-Lab Context Anchor note type. "
-            "Legacy Chunk Anchor/Chunk Recall models require backup and reimport."
+            "Check or fully synchronize the one-card TRVS-Lab Context Anchor "
+            "note type. Incompatible legacy models require manual migration."
         )
     )
     parser.add_argument(
@@ -34,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model-spec",
         default=str(DEFAULT_MODEL_SPEC_PATH),
-        help="JSON model spec whose FrontPath/BackPath/css_path should be synced.",
+        help="Complete model spec used as the strict synchronization target.",
     )
     parser.add_argument(
         "--anki-url",
@@ -42,167 +51,57 @@ def parse_args() -> argparse.Namespace:
         help=f"AnkiConnect URL. Default: {DEFAULT_ANKI_URL}",
     )
     parser.add_argument(
-        "--create-if-missing",
+        "--check",
         action="store_true",
-        help="Create the note type from the bundled spec if it does not exist yet.",
+        help="Report the model plan without modifying Anki.",
     )
     parser.add_argument(
-        "--templates-only",
+        "--sync",
         action="store_true",
-        help="Only update card front/back templates; leave styling unchanged.",
-    )
-    parser.add_argument(
-        "--css-only",
-        action="store_true",
-        help="Only update note type styling; leave card templates unchanged.",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Load the bundled spec and print what would change without calling AnkiConnect.",
-    )
-    parser.add_argument(
-        "--no-sync",
-        action="store_true",
-        help="Skip Anki sync after a successful update.",
+        help="Trigger Anki cloud sync after an exact model verification.",
     )
     return parser.parse_args()
 
 
-def build_template_payload(spec: dict[str, Any]) -> dict[str, dict[str, str]]:
-    templates: dict[str, dict[str, str]] = {}
-    for template in spec.get("card_templates", []):
-        name = template.get("Name")
-        front = template.get("Front")
-        back = template.get("Back")
-        if not name or front is None or back is None:
-            raise AnkiImportError(
-                "Each card template in the model spec must include Name, Front, and Back."
-            )
-        templates[str(name)] = {"Front": str(front), "Back": str(back)}
-    if not templates:
-        raise AnkiImportError(
-            "Model spec does not contain any expanded card templates."
-        )
-    return templates
-
-
-def describe_plan(
-    *,
-    model_name: str,
-    spec: dict[str, Any],
-    sync_templates: bool,
-    sync_css: bool,
-    create_if_missing: bool,
-) -> None:
-    print(f"Model: {model_name}")
-    print(f"Fields in bundled spec: {', '.join(spec.get('fields', []))}")
-    if sync_templates:
-        names = [
-            str(template.get("Name", "")) for template in spec.get("card_templates", [])
-        ]
-        print(f"Templates to sync: {', '.join(name for name in names if name)}")
-    else:
-        print("Templates to sync: skipped")
-    print(f"Styling to sync: {'yes' if sync_css else 'skipped'}")
-    print(f"Create if missing: {'yes' if create_if_missing else 'no'}")
-
-
-def create_model(client: AnkiConnectClient, spec: dict[str, Any]) -> None:
-    client.invoke(
-        "createModel",
-        modelName=spec["model_name"],
-        inOrderFields=spec["fields"],
-        cardTemplates=spec["card_templates"],
-        css=spec["css"],
-    )
-
-
-def sync_model_templates(
-    client: AnkiConnectClient, model_name: str, spec: dict[str, Any]
-) -> None:
-    client.invoke(
-        "updateModelTemplates",
-        model={"name": model_name, "templates": build_template_payload(spec)},
-    )
-
-
-def sync_model_styling(
-    client: AnkiConnectClient, model_name: str, spec: dict[str, Any]
-) -> None:
-    css = spec.get("css")
-    if css is None:
-        raise AnkiImportError("Model spec does not contain expanded CSS.")
-    client.invoke("updateModelStyling", model={"name": model_name, "css": css})
-
-
-def ensure_model_fields(
-    client: AnkiConnectClient,
-    model_name: str,
-    expected_fields: list[str],
-) -> None:
-    current_fields = client.invoke("modelFieldNames", modelName=model_name)
-    missing = [field for field in expected_fields if field not in current_fields]
-    extra = [field for field in current_fields if field not in expected_fields]
-    for field in missing:
-        client.invoke("modelFieldAdd", modelName=model_name, fieldName=field)
-        print(f"Added missing field to '{model_name}': {field}")
-    if extra:
-        print(f"Warning: existing note type has extra field(s): {', '.join(extra)}")
-
-
 def main() -> int:
     args = parse_args()
-    if args.templates_only and args.css_only:
+    if args.model != STRUCTURED_VOCAB_MODEL:
         print(
-            "Error: --templates-only and --css-only cannot be used together.",
+            "Error: this command supports the one-card TRVS-Lab model only.",
             file=sys.stderr,
         )
-        return 2
-
-    sync_templates = not args.css_only
-    sync_css = not args.templates_only
-    model_spec_path = Path(args.model_spec).expanduser()
+        return 1
 
     try:
-        spec = load_model_spec(model_spec_path, args.model)
-        if args.dry_run:
-            describe_plan(
-                model_name=args.model,
-                spec=spec,
-                sync_templates=sync_templates,
-                sync_css=sync_css,
-                create_if_missing=args.create_if_missing,
-            )
+        spec = load_model_spec(Path(args.model_spec), args.model)
+        with anki_operation_lock():
+            client = AnkiConnectClient(args.anki_url)
+            client.invoke("version")
+            plan = inspect_model(client, spec)
+            emit_preflight(plan)
+
+            if args.check:
+                if plan.action == "blocked":
+                    emit_blocked(plan)
+                    return 1
+                return 0
+
+            if plan.action == "blocked":
+                emit_blocked(plan)
+                return 1
+
+            try:
+                completed = apply_model_plan(client, plan)
+            except ModelApplyError as exc:
+                emit_update(exc.completed, exc.failed)
+                raise
+            emit_update(completed)
+            verify_model(client, spec)
+            if args.sync:
+                client.invoke("sync")
+                print("Triggered Anki sync.")
             return 0
-
-        client = AnkiConnectClient(args.anki_url)
-        models = client.invoke("modelNames")
-        model_exists = args.model in models
-
-        if not model_exists:
-            if not args.create_if_missing:
-                raise AnkiImportError(
-                    f"Anki note type not found: {args.model}. "
-                    "Open Anki, then re-run with --create-if-missing to create it from the bundled spec."
-                )
-            create_model(client, spec)
-            print(f"Created Anki note type '{args.model}' from bundled spec.")
-        else:
-            assert_model_migration_safe(client, args.model)
-            ensure_model_fields(client, args.model, list(spec.get("fields", [])))
-            if sync_templates:
-                sync_model_templates(client, args.model, spec)
-                print(f"Updated card template(s) for '{args.model}'.")
-            if sync_css:
-                sync_model_styling(client, args.model, spec)
-                print(f"Updated styling for '{args.model}'.")
-
-        if not args.no_sync:
-            client.invoke("sync")
-            print("Triggered Anki sync.")
-        return 0
-    except AnkiImportError as exc:
+    except (AnkiImportError, ModelContractError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
