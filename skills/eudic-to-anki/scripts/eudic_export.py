@@ -29,8 +29,6 @@ DEFAULT_PAGE_SIZE = 100
 OPENAPI_DOC_URL = "https://my.eudic.net/OpenAPI/Authorization"
 EXPORT_LOCK_PATH = Path(tempfile.gettempdir()) / "eudic-to-anki-export.lock"
 REQUEST_INTERVAL_SECONDS = 2.4
-REQUEST_MONOTONIC = time.monotonic
-REQUEST_SLEEP = time.sleep
 MAX_RETRY_AFTER_SECONDS = 120.0
 
 
@@ -38,7 +36,18 @@ def current_utc_time() -> datetime:
     return datetime.now(timezone.utc)
 
 
-REQUEST_UTC_NOW = current_utc_time
+@dataclass(frozen=True)
+class RequestTimeSource:
+    monotonic: Callable[[], float]
+    sleep: Callable[[float], None]
+    utc_now: Callable[[], datetime]
+
+
+REQUEST_TIME_SOURCE = RequestTimeSource(
+    monotonic=time.monotonic,
+    sleep=time.sleep,
+    utc_now=current_utc_time,
+)
 
 
 class ApiError(RuntimeError):
@@ -46,11 +55,18 @@ class ApiError(RuntimeError):
 
 
 class HttpResponseError(RuntimeError):
-    def __init__(self, code: int, message: str, headers: Any) -> None:
+    def __init__(
+        self,
+        code: int,
+        message: str,
+        headers: Any,
+        response_text: str,
+    ) -> None:
         super().__init__(f"HTTP {code}: {message}")
         self.code = code
         self.message = message
         self.headers = headers
+        self.response_text = response_text
 
 
 def acquire_export_lock() -> TextIO:
@@ -106,25 +122,23 @@ class RequestController:
         self,
         stats: RequestStats,
         *,
-        monotonic: Callable[[], float],
-        sleep: Callable[[float], None],
+        time_source: RequestTimeSource,
         interval_seconds: float = REQUEST_INTERVAL_SECONDS,
     ) -> None:
         self.stats = stats
-        self.monotonic = monotonic
-        self.sleep = sleep
+        self.time_source = time_source
         self.interval_seconds = interval_seconds
         self.last_started_at: float | None = None
 
     def before_request(
         self, request_kind: Literal["category", "word_page", "retry"]
     ) -> None:
-        now = self.monotonic()
+        now = self.time_source.monotonic()
         if self.last_started_at is not None:
             wait_seconds = self.interval_seconds - (now - self.last_started_at)
             if wait_seconds > 0:
-                self.sleep(wait_seconds)
-                now = self.monotonic()
+                self.time_source.sleep(wait_seconds)
+                now = self.time_source.monotonic()
         self.last_started_at = now
 
         if request_kind == "category":
@@ -136,7 +150,7 @@ class RequestController:
 
     def before_retry(self, retry_after_seconds: float) -> None:
         if retry_after_seconds > 0:
-            self.sleep(retry_after_seconds)
+            self.time_source.sleep(retry_after_seconds)
         self.before_request("retry")
 
 
@@ -307,15 +321,15 @@ def eudic_ssl_context() -> ssl.SSLContext:
     return ctx
 
 
-def _http_error_message(exc: urllib.error.HTTPError) -> str:
+def _http_error_details(exc: urllib.error.HTTPError) -> tuple[str, str]:
     body_text = exc.read().decode("utf-8", errors="replace")
     try:
         parsed = json.loads(body_text)
     except json.JSONDecodeError:
-        return body_text or exc.reason
+        return body_text or exc.reason, body_text
     if isinstance(parsed, dict) and parsed.get("message"):
-        return str(parsed["message"])
-    return body_text or exc.reason
+        return str(parsed["message"]), body_text
+    return body_text or exc.reason, body_text
 
 
 def _perform_http_request(request: urllib.request.Request) -> dict[str, Any]:
@@ -329,10 +343,12 @@ def _perform_http_request(request: urllib.request.Request) -> dict[str, Any]:
             except json.JSONDecodeError as exc:
                 raise ApiError("Eudic returned an invalid JSON response.") from exc
     except urllib.error.HTTPError as exc:
+        message, response_text = _http_error_details(exc)
         raise HttpResponseError(
             exc.code,
-            _http_error_message(exc),
+            message,
             exc.headers,
+            response_text,
         ) from exc
     except urllib.error.URLError as exc:
         raise ApiError(f"Network error: {exc.reason}") from exc
@@ -343,7 +359,7 @@ def _is_rate_limit_error(error: HttpResponseError) -> bool:
         return True
     if error.code != 403:
         return False
-    message = error.message.casefold()
+    message = f"{error.message}\n{error.response_text}".casefold()
     markers = (
         "too many requests",
         "rate limit",
@@ -357,7 +373,10 @@ def _is_rate_limit_error(error: HttpResponseError) -> bool:
     return any(marker in message for marker in markers)
 
 
-def _retry_after_seconds(headers: Any) -> float | None:
+def _retry_after_seconds(
+    headers: Any,
+    utc_now: Callable[[], datetime],
+) -> float | None:
     raw_value = headers.get("Retry-After") if headers is not None else None
     if raw_value is None:
         return None
@@ -371,7 +390,7 @@ def _retry_after_seconds(headers: Any) -> float | None:
             return None
         if retry_at.tzinfo is None:
             retry_at = retry_at.replace(tzinfo=timezone.utc)
-        seconds = (retry_at.astimezone(timezone.utc) - REQUEST_UTC_NOW()).total_seconds()
+        seconds = (retry_at.astimezone(timezone.utc) - utc_now()).total_seconds()
 
     if not math.isfinite(seconds) or not 0 <= seconds <= MAX_RETRY_AFTER_SECONDS:
         return None
@@ -410,7 +429,10 @@ def api_request(
     except HttpResponseError as exc:
         if not _is_rate_limit_error(exc):
             raise ApiError(str(exc)) from exc
-        retry_after = _retry_after_seconds(exc.headers)
+        retry_after = _retry_after_seconds(
+            exc.headers,
+            request_controller.time_source.utc_now,
+        )
         if retry_after is None:
             raise ApiError(
                 f"{exc}. Rate limit response did not include a valid Retry-After "
@@ -693,8 +715,7 @@ def main() -> int:
         lock_handle = acquire_export_lock()
         request_controller = RequestController(
             stats,
-            monotonic=REQUEST_MONOTONIC,
-            sleep=REQUEST_SLEEP,
+            time_source=REQUEST_TIME_SOURCE,
         )
         categories = list_categories(args.language, auth_header, request_controller)
 

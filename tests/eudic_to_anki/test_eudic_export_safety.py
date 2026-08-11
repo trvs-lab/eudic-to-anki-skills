@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 import urllib.error
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import Message
 from pathlib import Path
 from unittest import mock
@@ -41,9 +41,13 @@ class FakeResponse:
 
 
 class FakeClock:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        start_utc: datetime = datetime(2026, 8, 10, tzinfo=timezone.utc),
+    ) -> None:
         self.now = 0.0
         self.sleeps: list[float] = []
+        self.start_utc = start_utc
 
     def monotonic(self) -> float:
         return self.now
@@ -51,6 +55,9 @@ class FakeClock:
     def sleep(self, seconds: float) -> None:
         self.sleeps.append(seconds)
         self.now += seconds
+
+    def utc_now(self) -> datetime:
+        return self.start_utc + timedelta(seconds=self.now)
 
 
 def http_error(
@@ -78,9 +85,7 @@ class EudicExportSafetyTests(unittest.TestCase):
         *,
         lock_path: Path,
         urlopen: object,
-        monotonic: object | None = None,
-        sleep: object | None = None,
-        utc_now: object | None = None,
+        clock: FakeClock | None = None,
     ) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -94,25 +99,17 @@ class EudicExportSafetyTests(unittest.TestCase):
             stack.enter_context(
                 mock.patch.object(eudic_export.urllib.request, "urlopen", urlopen)
             )
-            if monotonic is not None:
+            if clock is not None:
                 stack.enter_context(
                     mock.patch.object(
                         eudic_export,
-                        "REQUEST_MONOTONIC",
-                        monotonic,
+                        "REQUEST_TIME_SOURCE",
+                        eudic_export.RequestTimeSource(
+                            monotonic=clock.monotonic,
+                            sleep=clock.sleep,
+                            utc_now=clock.utc_now,
+                        ),
                         create=True,
-                    )
-                )
-            if sleep is not None:
-                stack.enter_context(
-                    mock.patch.object(
-                        eudic_export, "REQUEST_SLEEP", sleep, create=True
-                    )
-                )
-            if utc_now is not None:
-                stack.enter_context(
-                    mock.patch.object(
-                        eudic_export, "REQUEST_UTC_NOW", utc_now, create=True
                     )
                 )
             stack.enter_context(contextlib.redirect_stdout(stdout))
@@ -190,8 +187,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 ],
                 lock_path=tmp_path / "export.lock",
                 urlopen=fake_urlopen,
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
+                clock=clock,
             )
 
             self.assertEqual(result, 0, stderr)
@@ -228,8 +224,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 ["--token", "test-token", "--list-categories"],
                 lock_path=Path(tmp) / "export.lock",
                 urlopen=fake_urlopen,
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
+                clock=clock,
             )
 
         self.assertEqual(result, 0, stderr)
@@ -260,9 +255,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 ["--token", "test-token", "--list-categories"],
                 lock_path=Path(tmp) / "export.lock",
                 urlopen=fake_urlopen,
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
-                utc_now=lambda: datetime(2026, 8, 10, tzinfo=timezone.utc),
+                clock=clock,
             )
 
         self.assertEqual(result, 0, stderr)
@@ -287,8 +280,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 ["--token", "secret-test-token", "--list-categories"],
                 lock_path=Path(tmp) / "export.lock",
                 urlopen=fake_urlopen,
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
+                clock=clock,
             )
 
         self.assertEqual(result, 1)
@@ -299,6 +291,39 @@ class EudicExportSafetyTests(unittest.TestCase):
         self.assertIn(
             "Request stats: categories=1, word_pages=0, retries=0, total=1",
             stderr,
+        )
+
+    def test_rate_limited_403_detects_detail_beside_generic_message(self) -> None:
+        clock = FakeClock()
+        calls = 0
+
+        def fake_urlopen(_: object, **__: object) -> FakeResponse:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise http_error(
+                    403,
+                    {
+                        "message": "Forbidden",
+                        "detail": "Too many requests; access is temporarily limited",
+                    },
+                    retry_after="0",
+                )
+            return FakeResponse({"data": []})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            result, stdout, stderr = self.run_main(
+                ["--token", "test-token", "--list-categories"],
+                lock_path=Path(tmp) / "export.lock",
+                urlopen=fake_urlopen,
+                clock=clock,
+            )
+
+        self.assertEqual(result, 0, stderr)
+        self.assertEqual(calls, 2)
+        self.assertIn(
+            "Request stats: categories=1, word_pages=0, retries=1, total=2",
+            stdout,
         )
 
     def test_invalid_retry_after_stops_without_guessing(self) -> None:
@@ -322,8 +347,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                         ["--token", "test-token", "--list-categories"],
                         lock_path=Path(tmp) / "export.lock",
                         urlopen=fake_urlopen,
-                        monotonic=clock.monotonic,
-                        sleep=clock.sleep,
+                        clock=clock,
                     )
 
                 self.assertEqual(result, 1)
@@ -367,8 +391,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 ],
                 lock_path=tmp_path / "export.lock",
                 urlopen=fake_urlopen,
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
+                clock=clock,
             )
 
             self.assertEqual(result, 1)
@@ -424,8 +447,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                     ],
                     lock_path=lock_path,
                     urlopen=successful_urlopen,
-                    monotonic=clock.monotonic,
-                    sleep=clock.sleep,
+                    clock=clock,
                 )
 
             self.assertEqual(result, 1)
@@ -446,8 +468,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 ["--token", "test-token", "--list-categories"],
                 lock_path=lock_path,
                 urlopen=lambda *_args, **_kwargs: FakeResponse({"data": []}),
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
+                clock=clock,
             )
             self.assertEqual(result, 0, stderr)
 
@@ -477,8 +498,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 ],
                 lock_path=tmp_path / "export.lock",
                 urlopen=fake_urlopen,
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
+                clock=clock,
             )
 
             self.assertEqual(result, 1)
@@ -538,8 +558,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 ],
                 lock_path=tmp_path / "export.lock",
                 urlopen=fake_urlopen,
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
+                clock=clock,
             )
 
             self.assertEqual(result, 0, stderr)
@@ -569,8 +588,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 urlopen=lambda *_args, **_kwargs: (_ for _ in ()).throw(
                     http_error(403, {"message": "Invalid authorization token"})
                 ),
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
+                clock=clock,
             )
             self.assertEqual(result, 1)
 
@@ -578,8 +596,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 ["--token", "test-token", "--list-categories"],
                 lock_path=lock_path,
                 urlopen=lambda *_args, **_kwargs: FakeResponse({"data": []}),
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
+                clock=clock,
             )
             self.assertEqual(result, 0, stderr)
 
@@ -594,16 +611,14 @@ class EudicExportSafetyTests(unittest.TestCase):
                     urlopen=lambda *_args, **_kwargs: (_ for _ in ()).throw(
                         RuntimeError("unexpected boundary failure")
                     ),
-                    monotonic=clock.monotonic,
-                    sleep=clock.sleep,
+                    clock=clock,
                 )
 
             result, _, stderr = self.run_main(
                 ["--token", "test-token", "--list-categories"],
                 lock_path=lock_path,
                 urlopen=lambda *_args, **_kwargs: FakeResponse({"data": []}),
-                monotonic=clock.monotonic,
-                sleep=clock.sleep,
+                clock=clock,
             )
             self.assertEqual(result, 0, stderr)
 
