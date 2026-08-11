@@ -787,6 +787,13 @@ def main() -> int:
         print(f"Error: {exc}", file=sys.stderr)
         print(stats.summary(), file=sys.stderr)
         return 1
+    except Exception as exc:
+        print(
+            f"Error: Unexpected export failure ({type(exc).__name__}).",
+            file=sys.stderr,
+        )
+        print(stats.summary(), file=sys.stderr)
+        return 1
     finally:
         if lock_handle is not None:
             release_export_lock(lock_handle)

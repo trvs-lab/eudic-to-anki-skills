@@ -604,15 +604,21 @@ class EudicExportSafetyTests(unittest.TestCase):
         clock = FakeClock()
         with tempfile.TemporaryDirectory() as tmp:
             lock_path = Path(tmp) / "export.lock"
-            with self.assertRaisesRegex(RuntimeError, "unexpected boundary failure"):
-                self.run_main(
-                    ["--token", "test-token", "--list-categories"],
-                    lock_path=lock_path,
-                    urlopen=lambda *_args, **_kwargs: (_ for _ in ()).throw(
-                        RuntimeError("unexpected boundary failure")
-                    ),
-                    clock=clock,
-                )
+            result, _, stderr = self.run_main(
+                ["--token", "test-token", "--list-categories"],
+                lock_path=lock_path,
+                urlopen=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    RuntimeError("unexpected boundary failure with secret detail")
+                ),
+                clock=clock,
+            )
+            self.assertEqual(result, 1)
+            self.assertIn("Unexpected export failure (RuntimeError)", stderr)
+            self.assertNotIn("secret detail", stderr)
+            self.assertIn(
+                "Request stats: categories=1, word_pages=0, retries=0, total=1",
+                stderr,
+            )
 
             result, _, stderr = self.run_main(
                 ["--token", "test-token", "--list-categories"],
