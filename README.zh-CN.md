@@ -62,7 +62,6 @@ Codex 用户还需要让 Agent 读取 [`skills/eudic-to-anki/RULES_README.md`](s
 把 2026 年 8 月 1 日的欧路词典生词导入 Anki。
 ```
 
-「过去一周」等连续日期范围只执行一次导出，不会拆成多个单日导出任务。
 
 ## 项目文档
 

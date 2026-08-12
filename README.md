@@ -62,7 +62,6 @@ Import my Eudic words from the past week into Anki.
 Import my Eudic words from 2026-08-01 into Anki.
 ```
 
-A continuous range such as “the past week” is exported once, not split into daily export jobs.
 
 ## Project documentation
 
