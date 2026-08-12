@@ -5,23 +5,25 @@
   <div class="answer-ipa">{{音标}}</div>
   <div class="answer-definition">{{英英}}</div>
 
-  {{#来源词块}}
-  <div class="answer-row source-chunk">
-    <span class="answer-label">来源词块</span>
-    <span>{{来源词块}}</span>
-  </div>
-  {{/来源词块}}
+  <div id="annotation-rail" class="annotation-rail">
+    {{#来源词块}}
+    <div class="note-row context-note-row">
+      <span class="note-label">来源</span>
+      <span class="note-value">{{来源词块}}</span>
+    </div>
+    {{/来源词块}}
 
-  {{#词块释义}}
-  <div class="answer-row chunk-meaning">
-    <span class="answer-label">词块释义</span>
-    <span>{{词块释义}}</span>
-  </div>
-  {{/词块释义}}
+    {{#词块释义}}
+    <div class="note-row context-note-row">
+      <span class="note-label">释义</span>
+      <span class="note-value">{{词块释义}}</span>
+    </div>
+    {{/词块释义}}
 
-  {{#词族构词}}
-  <div class="word-family">{{词族构词}}</div>
-  {{/词族构词}}
+    {{#词族构词}}
+    <div id="word-family-source" hidden>{{词族构词}}</div>
+    {{/词族构词}}
+  </div>
 
   {{#历史语境}}
   <div class="answer-row history">
@@ -38,10 +40,97 @@
 
 <script>
 (function () {
+  var rail = document.getElementById("annotation-rail");
+  var wordFamilySource = document.getElementById("word-family-source");
+  if (rail && wordFamilySource) {
+    appendMorphologyRows(rail, readFieldText(wordFamilySource));
+    wordFamilySource.parentNode.removeChild(wordFamilySource);
+  }
+  if (rail && !rail.querySelector(".note-row")) rail.hidden = true;
+
   var latest = document.getElementById("latest-encounter");
-  if (!latest) return;
-  var value = latest.textContent.trim();
-  var match = value.match(/^\d{4}-\d{2}-\d{2}/);
-  if (match) latest.textContent = match[0];
+  if (latest) {
+    var value = latest.textContent.trim();
+    var match = value.match(/^\d{4}-\d{2}-\d{2}/);
+    if (match) latest.textContent = match[0];
+  }
+
+  function appendMorphologyRows(container, rawText) {
+    var lines = rawText
+      .split(/\r?\n/)
+      .map(function (line) { return line.trim(); })
+      .filter(Boolean);
+    var rows = lines.map(parseMorphologyLine);
+    if (!rows.length || rows.some(function (row) { return !row; })) {
+      rows = [{ label: "构词", value: rawText.trim() }];
+    }
+
+    var divideBeforeFirst = Boolean(container.querySelector(".note-row"));
+    rows.forEach(function (item, index) {
+      var row = document.createElement("div");
+      row.className = "note-row morphology-row";
+      if (index === 0 && divideBeforeFirst) row.classList.add("morphology-start");
+
+      var label = document.createElement("span");
+      label.className = "note-label";
+      label.textContent = item.label;
+
+      var noteValue = document.createElement("span");
+      noteValue.className = "note-value";
+      appendStyledMorphology(noteValue, item.value);
+
+      row.appendChild(label);
+      row.appendChild(noteValue);
+      container.appendChild(row);
+    });
+  }
+
+  function readFieldText(root) {
+    var output = [];
+    for (var index = 0; index < root.childNodes.length; index += 1) {
+      var node = root.childNodes[index];
+      if (node.nodeType === Node.TEXT_NODE) {
+        output.push(node.nodeValue);
+      } else if (node.nodeName === "BR") {
+        output.push("\n");
+      } else {
+        output.push(readFieldText(node));
+      }
+    }
+    return output.join("");
+  }
+
+  function parseMorphologyLine(line) {
+    if (line.indexOf("拆解：") === 0) {
+      return { label: "拆解", value: line.slice(3).trim() };
+    }
+    if (line.indexOf("联想：") === 0) {
+      return { label: "联想", value: line.slice(3).trim() };
+    }
+    return null;
+  }
+
+  function appendStyledMorphology(container, text) {
+    var pattern = /([-A-Za-z/']+)「([^」]+)」/g;
+    var resultStart = text.lastIndexOf("→");
+    var cursor = 0;
+    var match;
+    while ((match = pattern.exec(text))) {
+      container.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+
+      var isResult = resultStart !== -1 && match.index > resultStart;
+      var term = document.createElement("span");
+      term.className = isResult ? "term derivation-result" : "term";
+      term.textContent = match[1];
+      container.appendChild(term);
+
+      var gloss = document.createElement("span");
+      gloss.className = isResult ? "gloss derivation-result" : "gloss";
+      gloss.textContent = "「" + match[2] + "」";
+      container.appendChild(gloss);
+      cursor = pattern.lastIndex;
+    }
+    container.appendChild(document.createTextNode(text.slice(cursor)));
+  }
 })();
 </script>

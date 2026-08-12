@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TRVS Lab · 边注卡片配色对比</title>
+  <style>
+    :root { --canvas:#e9edf3; --grid:rgba(80,94,118,.07); --ease:cubic-bezier(.23,1,.32,1); }
+    * { box-sizing:border-box; }
+    html, body { min-height:100%; scrollbar-width:none; -ms-overflow-style:none; }
+    html::-webkit-scrollbar, body::-webkit-scrollbar { display:none; width:0; height:0; }
+    body { margin:0; color:#17202e; background-color:var(--canvas); background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px); background-size:24px 24px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; }
+    button { font:inherit; }
+    .shell { width:min(100%,1040px); margin:auto; padding:24px 24px 96px; }
+    .toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; }
+    .kicker { margin:0 0 3px; color:#566b91; font-size:11px; font-weight:750; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { margin:0; font-size:15px; font-weight:650; }
+    .controls { display:flex; gap:5px; padding:4px; border:1px solid rgba(101,112,131,.2); border-radius:10px; background:rgba(255,255,255,.72); box-shadow:0 1px 2px rgba(34,47,72,.05); }
+    .control { min-height:32px; padding:0 11px; border:0; border-radius:7px; color:#5b6575; background:transparent; font-size:12px; font-weight:650; cursor:pointer; transition:transform 140ms var(--ease),color 140ms ease,background-color 140ms ease; }
+    .control[aria-pressed="true"] { color:#fff; background:#17202e; }
+    .control:active { transform:scale(.97); }
+    #stage { display:grid; min-height:760px; place-items:start center; }
+    .anki-window { width:454px; overflow:hidden; border:1px solid rgba(85,98,119,.3); border-radius:14px; background:#fff; box-shadow:0 24px 80px rgba(34,47,72,.18),0 3px 12px rgba(34,47,72,.08); }
+    .anki-window.phone { width:390px; }
+    .window-bar { position:relative; display:flex; height:30px; align-items:center; padding:0 10px; border-bottom:1px solid #d8dde5; background:#f5f6f8; }
+    .lights { display:flex; gap:6px; }
+    .lights i { width:10px; height:10px; border:1px solid rgba(0,0,0,.12); border-radius:50%; }
+    .lights i:nth-child(1) { background:#ff5f57; } .lights i:nth-child(2) { background:#febc2e; } .lights i:nth-child(3) { background:#28c840; }
+    .window-title { position:absolute; left:50%; color:#394251; font-size:12px; font-weight:650; transform:translateX(-50%); }
+    .card { --ink:#17202e; --muted:#657083; --faint:#8f98a8; --line:#e2e7ef; --ipa:#566b91; --mark:rgba(76,96,137,.46); --rail:#8293b2; --note:#f4f6fa; --paper:#fbfcfe; min-height:700px; padding:29px 22px 32px; color:var(--ink); background:var(--paper); }
+    .card.graphite { --ink:#202329; --muted:#666a72; --faint:#91949a; --line:#e1e2e4; --ipa:#62666e; --mark:rgba(65,70,78,.36); --rail:#9b9fa6; --note:#f5f5f5; --paper:#fcfcfb; }
+    .card.sage { --ink:#1d2926; --muted:#61716c; --faint:#8b9995; --line:#dfe7e3; --ipa:#4f6f67; --mark:rgba(75,106,98,.42); --rail:#8ba49d; --note:#f1f6f4; --paper:#fbfdfc; }
+    .card.dusk { --ink:#28232f; --muted:#706779; --faint:#9a92a3; --line:#e6e1e9; --ipa:#6e627e; --mark:rgba(106,92,123,.4); --rail:#a095ad; --note:#f6f3f7; --paper:#fdfbfd; }
+    .dark .card { --ink:rgba(255,255,255,.9); --muted:rgba(235,240,250,.62); --faint:rgba(235,240,250,.48); --line:rgba(235,240,250,.13); --ipa:#9eacc7; --mark:rgba(158,172,199,.5); --rail:#7485a8; --note:rgba(158,172,199,.07); --paper:#171b22; }
+    .dark .card.graphite { --ink:rgba(255,255,255,.9); --muted:rgba(238,239,242,.6); --faint:rgba(238,239,242,.46); --line:rgba(238,239,242,.12); --ipa:#a4a7ad; --mark:rgba(164,167,173,.45); --rail:#7d8188; --note:rgba(238,239,242,.055); --paper:#1a1b1d; }
+    .dark .card.sage { --ink:rgba(246,252,249,.91); --muted:rgba(220,236,230,.6); --faint:rgba(220,236,230,.45); --line:rgba(220,236,230,.12); --ipa:#9bb7af; --mark:rgba(155,183,175,.45); --rail:#708f87; --note:rgba(155,183,175,.065); --paper:#17201e; }
+    .dark .card.dusk { --ink:rgba(251,247,253,.91); --muted:rgba(234,224,240,.61); --faint:rgba(234,224,240,.46); --line:rgba(234,224,240,.12); --ipa:#b1a4be; --mark:rgba(177,164,190,.45); --rail:#897a98; --note:rgba(177,164,190,.065); --paper:#1c1921; }
+    .front { text-align:center; }
+    .word { -webkit-appearance:none; appearance:none; -webkit-tap-highlight-color:transparent; margin:0; padding:0; border:0; border-radius:0; box-shadow:none; min-width:0; min-height:0; outline:none; color:var(--ink); background:transparent; font:650 36px/1.15 Georgia,"Times New Roman",serif; cursor:pointer; transition:transform 140ms var(--ease); }
+    .word:active { transform:scale(.97); }
+    .word:hover, .word:active, .word:focus { border-color:transparent; box-shadow:none; color:var(--ink); background:transparent; }
+    .word:focus { outline:none; }
+    .word:focus-visible { outline:3px solid rgba(79,111,103,.18); outline-offset:3px; }
+    .sentence { width:fit-content; max-width:100%; margin:22px auto 0; font:400 22px/1.55 Georgia,"Times New Roman",serif; text-align:left; }
+    mark { color:inherit; background:transparent; font-weight:700; text-decoration:underline; text-decoration-color:var(--mark); text-decoration-thickness:1.5px; text-underline-offset:5px; }
+    .answer { margin-top:24px; padding-top:23px; border-top:1px solid var(--line); animation:answer-reveal 160ms var(--ease) both; }
+    .meaning { font-size:22px; font-weight:700; line-height:1.45; }
+    .ipa { margin-top:7px; color:var(--ipa); font:19px/1.4 Georgia,"Times New Roman",serif; }
+    .definition { margin-top:13px; font:19px/1.52 Georgia,"Times New Roman",serif; }
+    .rail { position:relative; margin-top:20px; padding:17px 16px 17px 18px; border-radius:0 12px 12px 0; background:var(--note); }
+    .rail::before { position:absolute; inset:0 auto 0 0; width:2px; background:var(--rail); content:""; }
+    .row { display:grid; grid-template-columns:60px minmax(0,1fr); gap:10px; align-items:baseline; font-size:15px; line-height:1.55; }
+    .row + .row { margin-top:11px; }
+    .row.breakdown { position:relative; margin-top:17px; padding-top:16px; }
+    .row.breakdown::before { position:absolute; top:0; right:0; left:70px; height:1px; background:var(--line); content:""; }
+    .label { color:var(--muted); font-size:12px; font-weight:650; letter-spacing:.04em; }
+    .term, .result { font-weight:650; } .gloss { color:var(--muted); }
+    .meta { display:flex; flex-wrap:wrap; gap:7px 18px; margin-top:18px; color:var(--faint); font-size:12px; font-variant-numeric:tabular-nums; }
+    .review { display:flex; min-height:46px; align-items:center; gap:8px; padding:7px 10px; border-top:1px solid #d8dde5; background:#f5f6f8; color:#26303f; font-size:11px; }
+    .review span { padding:4px 10px; border:1px solid #d7dce4; border-radius:6px; background:#fff; font-weight:650; } .review .spacer { flex:1; border:0; background:transparent; } .review .next { color:#fff; border-color:#2f8df5; background:#2f8df5; }
+    .proto-picker { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:2147483647; display:flex; align-items:center; gap:2px; padding:4px; border-radius:999px; background:rgba(10,10,10,.82); -webkit-backdrop-filter:blur(12px) saturate(1.4); backdrop-filter:blur(12px) saturate(1.4); box-shadow:0 0 0 1px rgba(255,255,255,.08) inset,0 8px 24px rgba(0,0,0,.24),0 2px 6px rgba(0,0,0,.12); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size:13px; line-height:1; -webkit-font-smoothing:antialiased; user-select:none; -webkit-user-select:none; }
+    .proto-picker-highlight { position:absolute; top:4px; left:0; height:28px; border-radius:999px; background:rgba(255,255,255,.12); will-change:transform; }
+    .proto-picker[data-ready] .proto-picker-highlight { transition:transform 250ms cubic-bezier(.23,1,.32,1),width 250ms cubic-bezier(.23,1,.32,1); }
+    .proto-picker-item { position:relative; display:flex; align-items:center; height:28px; padding:0 12px; border:0; border-radius:999px; background:transparent; color:rgba(255,255,255,.55); font:inherit; cursor:pointer; transition:color 150ms ease-out; }
+    .proto-picker-item:hover { color:rgba(255,255,255,.85); } .proto-picker-item:active { transform:scale(.97); } .proto-picker-item:focus-visible { outline:2px solid rgba(255,255,255,.4); outline-offset:2px; } .proto-picker-item[data-active] { color:#fff; }
+    @keyframes answer-reveal { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes answer-fade { from{opacity:0} to{opacity:1} }
+    @media(max-width:560px) { .shell{padding:14px 14px 96px}.toolbar{align-items:flex-start;flex-direction:column}.anki-window,.anki-window.phone{width:min(100%,390px)}.card{padding-left:18px;padding-right:18px}.row{grid-template-columns:54px minmax(0,1fr);gap:8px}.row.breakdown::before{left:62px}.proto-picker-item{padding:0 10px} }
+    @media(prefers-reduced-motion:reduce) { .proto-picker[data-ready] .proto-picker-highlight{transition:none}.control,.word{transition-duration:.01ms}.answer{animation:answer-fade 120ms var(--ease) both} }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="toolbar"><div><p class="kicker">Marginalia · palette study</p><h1>TRVS Lab 边注卡片配色对比</h1></div><div class="controls"><button class="control" data-size="desktop" aria-pressed="true">桌面</button><button class="control" data-size="phone" aria-pressed="false">手机</button><button class="control" data-theme aria-pressed="false">深色</button></div></header>
+    <main id="stage"></main>
+  </div>
+  <nav class="proto-picker" aria-label="Prototype variants"><span class="proto-picker-highlight" aria-hidden="true"></span><button class="proto-picker-item" data-active aria-current="true">雾蓝</button><button class="proto-picker-item">石墨</button><button class="proto-picker-item">鼠尾草</button><button class="proto-picker-item">暮紫</button></nav>
+  <script>
+    const palettes=["fog","graphite","sage","dusk"];
+    const state={phone:false,dark:false};
+    const card=palette=>`<section class="anki-window ${state.phone?"phone":""} ${state.dark?"dark":""}"><header class="window-bar"><div class="lights"><i></i><i></i><i></i></div><div class="window-title">预览</div></header><article class="card ${palette}"><section class="front"><button class="word" type="button" aria-label="播放 innovator 的发音">innovator</button><div class="sentence">To switch teams and become a producer, you need to be an entrepreneur and an <mark>innovator</mark>.</div></section><section class="answer"><div class="meaning">n. 创新者；革新者</div><div class="ipa">/ˈɪnəveɪtər/</div><div class="definition">a person who introduces useful new ideas or methods</div><section class="rail"><div class="row"><span class="label">来源</span><span>an entrepreneur and an innovator</span></div><div class="row"><span class="label">释义</span><span>企业家和创新者</span></div><div class="row breakdown"><span class="label">拆解</span><span><span class="term">innovate</span><span class="gloss">「v. 创新」</span> + <span class="term">-or</span><span class="gloss">「表示人」</span> → <span class="result">innovator「n. 创新者」</span></span></div><div class="row"><span class="label">联想</span><span><span class="term">innovation</span><span class="gloss">「n. 创新」</span>、<span class="term">innovative</span><span class="gloss">「adj. 创新的」</span></span></div></section><div class="meta"><span>遇见 1 次</span><span>最近遇见 2026-08-06</span></div></section></article><footer class="review"><span>重播音频</span><span>□ 仅背面</span><span class="spacer"></span><span>&lt;</span><span class="next">&gt;</span></footer></section>`;
+    const stage=document.getElementById("stage"),picker=document.querySelector(".proto-picker"),highlight=picker.querySelector(".proto-picker-highlight"),items=[...picker.querySelectorAll(".proto-picker-item")]; let current=0;
+    function moveHighlight(){const el=items[current];highlight.style.width=el.offsetWidth+"px";highlight.style.transform=`translateX(${el.offsetLeft}px)`}
+    function mount(){stage.innerHTML=card(palettes[current])}
+    function setActive(i){if(i<0||i>=palettes.length)return;current=i;items.forEach((el,j)=>{el.toggleAttribute("data-active",j===i);j===i?el.setAttribute("aria-current","true"):el.removeAttribute("aria-current")});moveHighlight();const url=new URL(location);url.searchParams.set("v",i+1);history.replaceState(null,"",url);mount()}
+    items.forEach((el,i)=>el.addEventListener("click",()=>setActive(i)));window.addEventListener("resize",moveHighlight);
+    document.addEventListener("keydown",e=>{if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)||e.target.isContentEditable||e.metaKey||e.ctrlKey||e.altKey)return;const n=parseInt(e.key,10);if(n>=1&&n<=4)setActive(n-1);else if(e.key==="ArrowRight")setActive((current+1)%4);else if(e.key==="ArrowLeft")setActive((current+3)%4)});
+    document.querySelectorAll("[data-size]").forEach(button=>button.addEventListener("click",()=>{state.phone=button.dataset.size==="phone";document.querySelectorAll("[data-size]").forEach(item=>item.setAttribute("aria-pressed",item===button?"true":"false"));mount()}));
+    document.querySelector("[data-theme]").addEventListener("click",e=>{state.dark=!state.dark;e.currentTarget.setAttribute("aria-pressed",state.dark?"true":"false");mount()});
+    setActive((parseInt(new URLSearchParams(location.search).get("v"),10)||1)-1);requestAnimationFrame(()=>requestAnimationFrame(()=>picker.setAttribute("data-ready","")));
+  </script>
+</body>
+</html>

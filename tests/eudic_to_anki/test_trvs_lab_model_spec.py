@@ -75,9 +75,22 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         sentence = css.split(".card-sentence {", 1)[1].split("}", 1)[0]
         self.assertIn("\n  appearance: none", word_button)
         self.assertIn("-webkit-appearance: none", word_button)
+        self.assertIn("-webkit-tap-highlight-color: transparent", word_button)
         self.assertIn("font-family: Georgia, serif !important", word_button)
         self.assertIn("font-size: 34px !important", word_button)
         self.assertIn("font-weight: 650 !important", word_button)
+        self.assertIn("border-radius: 0 !important", word_button)
+        self.assertIn("box-shadow: none !important", word_button)
+        self.assertIn("min-width: 0", word_button)
+        self.assertIn("min-height: 0", word_button)
+        self.assertIn("outline: none", word_button)
+        self.assertIn(".word-button:active,\n.word-button:focus", css)
+        self.assertIn("background: transparent !important", css)
+        self.assertIn("border-color: transparent !important", css)
+        self.assertIn(
+            "outline: 3px solid rgba(79, 111, 103, 0.18) !important",
+            css,
+        )
         self.assertIn("width: fit-content", sentence)
         self.assertIn("max-width: 100%", sentence)
         self.assertIn("text-align: left", sentence)
@@ -106,15 +119,91 @@ class TrvsLabModelSpecTests(unittest.TestCase):
             '<span class="answer-label">词族构词</span>',
             back,
         )
-        self.assertIn('<div class="word-family">{{词族构词}}</div>', back)
+        self.assertIn('<span class="note-label">来源</span>', back)
+        self.assertIn('<span class="note-label">释义</span>', back)
+        self.assertIn('id="annotation-rail"', back)
+        self.assertIn('id="word-family-source"', back)
+        self.assertIn("appendMorphologyRows", back)
+        self.assertNotIn("innerHTML", back)
         self.assertIn('id="latest-encounter"', back)
         self.assertIn("latest.textContent = match[0]", back)
 
-    def test_word_family_uses_full_width_and_preserves_authored_lines(self) -> None:
+    def test_context_notes_share_one_rail_and_preserve_word_family_labels(self) -> None:
+        template = self.spec["card_templates"][0]
+        back = (ASSETS / template["BackPath"]).read_text(encoding="utf-8")
         css = (ASSETS / self.spec["css_path"]).read_text(encoding="utf-8")
-        self.assertIn(".word-family", css)
-        self.assertIn("white-space: pre-line", css)
-        self.assertNotIn(".answer-row.word-family", css)
+        self.assertIn(".annotation-rail", css)
+        self.assertIn(".annotation-rail::before", css)
+        self.assertIn(".note-row", css)
+        self.assertIn(".note-label", css)
+        self.assertIn(".morphology-start::before", css)
+        self.assertIn('line.indexOf("拆解：") === 0', back)
+        self.assertIn('line.indexOf("联想：") === 0', back)
+        self.assertIn('node.nodeName === "BR"', back)
+
+    def test_card_uses_restrained_emphasis_without_a_headword_underline(self) -> None:
+        css = (ASSETS / self.spec["css_path"]).read_text(encoding="utf-8")
+        word_button = css.split(".word-button {", 1)[1].split("}", 1)[0]
+        mark = css.split("mark {", 1)[1].split("}", 1)[0]
+        ipa = css.split(".answer-ipa {", 1)[1].split("}", 1)[0]
+        rail = css.split(".annotation-rail::before {", 1)[1].split("}", 1)[0]
+        self.assertIn("text-decoration: none", word_button)
+        self.assertNotIn("border-bottom", word_button)
+        self.assertIn("text-decoration-color: var(--mark)", mark)
+        self.assertIn("color: var(--ipa)", ipa)
+        self.assertIn("background: var(--rail)", rail)
+
+    def test_card_compacts_notes_hides_scrollbars_and_reveals_answer_gently(self) -> None:
+        css = (ASSETS / self.spec["css_path"]).read_text(encoding="utf-8")
+        self.assertIn("scrollbar-width: none", css)
+        self.assertIn("html::-webkit-scrollbar", css)
+        self.assertIn("body::-webkit-scrollbar", css)
+        self.assertIn(
+            "grid-template-columns: 60px minmax(0, 1fr); gap: 10px",
+            css,
+        )
+        self.assertIn(
+            "grid-template-columns: 54px minmax(0, 1fr); gap: 8px",
+            css,
+        )
+        self.assertIn("left: 70px", css)
+        self.assertIn("left: 62px", css)
+        self.assertIn(
+            "animation: answer-reveal 160ms var(--ease-out) both",
+            css,
+        )
+        self.assertIn("@keyframes answer-reveal", css)
+        self.assertIn("transform: translateY(8px)", css)
+        self.assertIn("@keyframes answer-fade", css)
+        self.assertIn(
+            "animation: answer-fade 120ms var(--ease-out) both",
+            css,
+        )
+
+    def test_card_promotes_the_sage_palette_in_light_and_dark_modes(self) -> None:
+        css = (ASSETS / self.spec["css_path"]).read_text(encoding="utf-8")
+        card = css.split(".card {", 1)[1].split("}", 1)[0]
+        night = css.split(".nightMode .card {", 1)[1].split("}", 1)[0]
+        for token in (
+            "--ink: #1d2926",
+            "--muted: #61716c",
+            "--faint: #8b9995",
+            "--line: #dfe7e3",
+            "--ipa: #4f6f67",
+            "--mark: rgba(75, 106, 98, 0.42)",
+            "--rail: #8ba49d",
+            "--note: #f1f6f4",
+            "background: #fbfdfc",
+        ):
+            self.assertIn(token, card)
+        for token in (
+            "--ipa: #9bb7af",
+            "--mark: rgba(155, 183, 175, 0.45)",
+            "--rail: #708f87",
+            "--note: rgba(155, 183, 175, 0.065)",
+            "background: #17201e",
+        ):
+            self.assertIn(token, night)
 
     def test_model_referenced_assets_exist(self) -> None:
         for template in self.spec["card_templates"]:
