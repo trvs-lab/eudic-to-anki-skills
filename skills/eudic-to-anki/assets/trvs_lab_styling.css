@@ -70,7 +70,7 @@ body::-webkit-scrollbar {
 .card-sentence { width: fit-content; max-width: 100%; margin: 22px auto 0; font: 400 22px/1.55 Georgia, serif; text-align: left; }
 mark { color: inherit; background: transparent; font-weight: 700; text-decoration: underline; text-decoration-color: var(--mark); text-decoration-thickness: 1.5px; text-underline-offset: 5px; }
 
-.answer-panel { margin-top: 26px; padding-top: 24px; border-top: 1px solid var(--line); animation: answer-reveal 160ms var(--ease-out) both; }
+.answer-panel { margin-top: 26px; padding-top: 24px; border-top: 1px solid var(--line); }
 .answer-primary { font-size: 23px; font-weight: 650; line-height: 1.45; }
 .answer-ipa { margin-top: 8px; color: var(--ipa); font: 19px/1.4 Georgia, serif; }
 .answer-definition { margin-top: 14px; font: 19px/1.55 Georgia, serif; }
@@ -89,16 +89,6 @@ mark { color: inherit; background: transparent; font-weight: 700; text-decoratio
 .derivation-result { color: var(--ink); font-weight: 650; }
 .encounter-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 20px; color: var(--faint); font-size: 13px; font-variant-numeric: tabular-nums; }
 
-@keyframes answer-reveal {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes answer-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 .nightMode .card { --ink: rgba(246, 252, 249, 0.91); --muted: rgba(220, 236, 230, 0.6); --faint: rgba(220, 236, 230, 0.45); --line: rgba(220, 236, 230, 0.12); --ipa: #9bb7af; --mark: rgba(155, 183, 175, 0.45); --rail: #708f87; --note: rgba(155, 183, 175, 0.065); background: #17201e; }
 
 @media (max-width: 480px) {
@@ -108,5 +98,4 @@ mark { color: inherit; background: transparent; font-weight: 700; text-decoratio
 
 @media (prefers-reduced-motion: reduce) {
   .word-button { transition-duration: 0.01ms; }
-  .answer-panel { animation: answer-fade 120ms var(--ease-out) both; }
 }

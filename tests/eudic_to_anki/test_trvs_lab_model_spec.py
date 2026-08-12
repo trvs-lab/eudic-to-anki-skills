@@ -153,7 +153,7 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn("color: var(--ipa)", ipa)
         self.assertIn("background: var(--rail)", rail)
 
-    def test_card_compacts_notes_hides_scrollbars_and_reveals_answer_gently(self) -> None:
+    def test_card_compacts_notes_hides_scrollbars_and_keeps_answer_stationary(self) -> None:
         css = (ASSETS / self.spec["css_path"]).read_text(encoding="utf-8")
         self.assertIn("scrollbar-width: none", css)
         self.assertIn("html::-webkit-scrollbar", css)
@@ -168,17 +168,11 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         )
         self.assertIn("left: 70px", css)
         self.assertIn("left: 62px", css)
-        self.assertIn(
-            "animation: answer-reveal 160ms var(--ease-out) both",
-            css,
-        )
-        self.assertIn("@keyframes answer-reveal", css)
-        self.assertIn("transform: translateY(8px)", css)
-        self.assertIn("@keyframes answer-fade", css)
-        self.assertIn(
-            "animation: answer-fade 120ms var(--ease-out) both",
-            css,
-        )
+        answer_panel = css.split(".answer-panel {", 1)[1].split("}", 1)[0]
+        self.assertNotIn("animation", answer_panel)
+        self.assertNotIn("@keyframes answer-reveal", css)
+        self.assertNotIn("@keyframes answer-fade", css)
+        self.assertNotIn("translateY(8px)", css)
 
     def test_card_promotes_the_sage_palette_in_light_and_dark_modes(self) -> None:
         css = (ASSETS / self.spec["css_path"]).read_text(encoding="utf-8")

@@ -43,7 +43,7 @@
     .word:focus-visible { outline:3px solid rgba(79,111,103,.18); outline-offset:3px; }
     .sentence { width:fit-content; max-width:100%; margin:22px auto 0; font:400 22px/1.55 Georgia,"Times New Roman",serif; text-align:left; }
     mark { color:inherit; background:transparent; font-weight:700; text-decoration:underline; text-decoration-color:var(--mark); text-decoration-thickness:1.5px; text-underline-offset:5px; }
-    .answer { margin-top:24px; padding-top:23px; border-top:1px solid var(--line); animation:answer-reveal 160ms var(--ease) both; }
+    .answer { margin-top:24px; padding-top:23px; border-top:1px solid var(--line); }
     .meaning { font-size:22px; font-weight:700; line-height:1.45; }
     .ipa { margin-top:7px; color:var(--ipa); font:19px/1.4 Georgia,"Times New Roman",serif; }
     .definition { margin-top:13px; font:19px/1.52 Georgia,"Times New Roman",serif; }
@@ -63,10 +63,8 @@
     .proto-picker[data-ready] .proto-picker-highlight { transition:transform 250ms cubic-bezier(.23,1,.32,1),width 250ms cubic-bezier(.23,1,.32,1); }
     .proto-picker-item { position:relative; display:flex; align-items:center; height:28px; padding:0 12px; border:0; border-radius:999px; background:transparent; color:rgba(255,255,255,.55); font:inherit; cursor:pointer; transition:color 150ms ease-out; }
     .proto-picker-item:hover { color:rgba(255,255,255,.85); } .proto-picker-item:active { transform:scale(.97); } .proto-picker-item:focus-visible { outline:2px solid rgba(255,255,255,.4); outline-offset:2px; } .proto-picker-item[data-active] { color:#fff; }
-    @keyframes answer-reveal { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes answer-fade { from{opacity:0} to{opacity:1} }
     @media(max-width:560px) { .shell{padding:14px 14px 96px}.toolbar{align-items:flex-start;flex-direction:column}.anki-window,.anki-window.phone{width:min(100%,390px)}.card{padding-left:18px;padding-right:18px}.row{grid-template-columns:54px minmax(0,1fr);gap:8px}.row.breakdown::before{left:62px}.proto-picker-item{padding:0 10px} }
-    @media(prefers-reduced-motion:reduce) { .proto-picker[data-ready] .proto-picker-highlight{transition:none}.control,.word{transition-duration:.01ms}.answer{animation:answer-fade 120ms var(--ease) both} }
+    @media(prefers-reduced-motion:reduce) { .proto-picker[data-ready] .proto-picker-highlight{transition:none}.control,.word{transition-duration:.01ms} }
   </style>
 </head>
 <body>
