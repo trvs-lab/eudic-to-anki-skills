@@ -59,7 +59,7 @@ Run rule-covered commands directly. Do not wrap them in a login shell or join th
 - Preserve the untouched Eudic sentence in `source_context`. Generated sentences are never historical source context.
 - Back content is immediately visible in this order: contextual Chinese meaning, IPA, English definition, optional source chunk and meaning, optional useful word-family/morphology hint, real historical contexts, encounter count, latest encounter time.
 - Author a non-empty `word_family` as exactly two plain-text lines: `拆解：...` then `联想：...`. Give every complete word its relevant POS and concise Chinese meaning; give roots and affixes a Chinese construction meaning without a POS; include 1–3 translated associations. The card shows these inline labels without a separate section title.
-- Omit low-value `word_family` and `source_chunk` fields instead of writing placeholders.
+- Treat `source_chunk` as a sparse phrase-level teaching aid: follow the exact quality gate in `references/word-coach-json-prompt.md`, and omit target-only or low-value chunks. Omit low-value `word_family` instead of writing placeholders.
 
 ## Classification
 

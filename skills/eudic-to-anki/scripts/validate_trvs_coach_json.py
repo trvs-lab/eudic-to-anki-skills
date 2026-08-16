@@ -26,6 +26,22 @@ WORD_FAMILY_PLACEHOLDERS = {"-", "无", "不可拆分", "无构词线索", "无�
 WORD_FAMILY_POS_RE = re.compile(r"^(?:[A-Za-z]+\.)+\s+")
 WORD_FAMILY_TARGET_RE = re.compile(r"^\s*[A-Za-z][A-Za-z' -]*「([^」]+)」")
 WORD_FAMILY_TERM_RE = re.compile(r"([-A-Za-z/']+)「([^」]+)」")
+SOURCE_CHUNK_DETERMINERS = {
+    "a",
+    "an",
+    "the",
+    "this",
+    "that",
+    "these",
+    "those",
+    "my",
+    "your",
+    "his",
+    "her",
+    "its",
+    "our",
+    "their",
+}
 IMPORTABLE_REQUIRED_KEYS = (
     "word",
     "pronunciation",
@@ -53,15 +69,13 @@ def _word_count(text: str) -> int:
     return len(EN_WORD_RE.findall(text))
 
 
-def _contains_target(sentence: str, word: str) -> bool:
+def _target_pattern(word: str) -> re.Pattern[str] | None:
     normalized_word = normalize_word_key(word)
-    normalized_sentence = normalize_word_key(sentence)
+    if not normalized_word:
+        return None
     if " " in normalized_word:
-        return bool(
-            re.search(
-                rf"(?<![a-z]){re.escape(normalized_word)}(?![a-z])",
-                normalized_sentence,
-            )
+        return re.compile(
+            rf"(?<![a-z]){re.escape(normalized_word)}(?![a-z])"
         )
     forms = {
         normalized_word,
@@ -90,9 +104,24 @@ def _contains_target(sentence: str, word: str) -> bool:
     alternatives = "|".join(
         re.escape(form) for form in sorted(forms, key=len, reverse=True)
     )
-    return bool(
-        re.search(rf"(?<![a-z])(?:{alternatives})(?![a-z])", normalized_sentence)
+    return re.compile(
+        rf"(?<![a-z])(?:{alternatives})(?![a-z])"
     )
+
+
+def _contains_target(sentence: str, word: str) -> bool:
+    pattern = _target_pattern(word)
+    return bool(pattern and pattern.search(normalize_word_key(sentence)))
+
+
+def _source_chunk_adds_phrase_information(chunk: str, word: str) -> bool:
+    pattern = _target_pattern(word)
+    normalized_chunk = normalize_word_key(chunk)
+    if not pattern or not pattern.search(normalized_chunk):
+        return False
+    remainder = pattern.sub(" ", normalized_chunk)
+    extra_words = (token.casefold() for token in EN_WORD_RE.findall(remainder))
+    return any(token not in SOURCE_CHUNK_DETERMINERS for token in extra_words)
 
 
 def _text(note: dict[str, Any], key: str) -> str:
@@ -356,6 +385,14 @@ def _validate_note(note: dict[str, Any], index: int) -> list[str]:
     if bool(chunk) != bool(chunk_meaning):
         errors.append(
             f"note[{index}] word={word!r}: source_chunk and source_chunk_meaning must appear together"
+        )
+    if chunk and not _contains_target(chunk, word):
+        errors.append(
+            f"note[{index}] word={word!r}: source_chunk must contain the target word or a valid inflection"
+        )
+    elif chunk and not _source_chunk_adds_phrase_information(chunk, word):
+        errors.append(
+            f"note[{index}] word={word!r}: source_chunk must add phrase-level information beyond the target word"
         )
     if chunk and normalize_word_key(chunk) not in normalize_word_key(sentence):
         errors.append(

@@ -355,6 +355,100 @@ class ValidateContextAnchorTests(unittest.TestCase):
         self.assertEqual(invalid.returncode, 1)
         self.assertIn("source_chunk must occur in card_sentence", invalid.stderr)
 
+    def test_source_chunk_must_contain_the_target_word(self) -> None:
+        result = self.run_validator(
+            valid_note(
+                source_chunk="serious damage",
+                source_chunk_meaning="严重破坏",
+            )
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "source_chunk must contain the target word or a valid inflection",
+            result.stderr,
+        )
+
+    def test_source_chunk_rejects_target_only_and_determiner_only_content(
+        self,
+    ) -> None:
+        cases = (
+            valid_note(
+                source_chunk="inflicted",
+                source_chunk_meaning="造成",
+            ),
+            valid_note(
+                word="medieval",
+                pronunciation="/ˌmediˈiːvəl/",
+                meaning=["adj. 中世纪的"],
+                english_definition="relating to the Middle Ages in European history",
+                word_family="",
+                source_context="A medieval anatomist studied the human body.",
+                card_sentence="A medieval anatomist studied the human body.",
+                source_chunk="medieval",
+                source_chunk_meaning="中世纪的",
+            ),
+            valid_note(
+                word="cleft",
+                pronunciation="/kleft/",
+                meaning=["n. 裂缝；裂口"],
+                english_definition="a narrow opening or split in a surface",
+                word_family="",
+                source_context="Start at the cleft where the rock divides.",
+                card_sentence="Start at the cleft where the rock divides.",
+                source_chunk="the cleft",
+                source_chunk_meaning="裂口处",
+            ),
+            valid_note(
+                word="lead",
+                pronunciation="/liːd/",
+                meaning=["n. 提前量"],
+                english_definition="time available before something needs to begin",
+                word_family="",
+                source_context="We want to reduce our lead time.",
+                card_sentence="We want to reduce our lead time.",
+                source_chunk="lead",
+                source_chunk_meaning="lead time 中的交付周期",
+            ),
+        )
+        for case in cases:
+            with self.subTest(word=case["word"], chunk=case["source_chunk"]):
+                result = self.run_validator(case)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    "source_chunk must add phrase-level information beyond the target word",
+                    result.stderr,
+                )
+
+    def test_source_chunk_accepts_terms_and_required_prepositions(self) -> None:
+        cases = (
+            valid_note(
+                word="lead",
+                pronunciation="/liːd/",
+                meaning=["n. 提前量"],
+                english_definition="time available before something needs to begin",
+                word_family="",
+                source_context="We want to reduce our lead time.",
+                card_sentence="We want to reduce our lead time.",
+                source_chunk="lead time",
+                source_chunk_meaning="交付周期；前置时间",
+            ),
+            valid_note(
+                word="rely",
+                pronunciation="/rɪˈlaɪ/",
+                meaning=["vi. 依靠；信赖"],
+                english_definition="to need or trust someone or something",
+                word_family="",
+                source_context="You can rely on this backup system.",
+                card_sentence="You can rely on this backup system.",
+                source_chunk="rely on",
+                source_chunk_meaning="依靠；信赖",
+            ),
+        )
+        for case in cases:
+            with self.subTest(word=case["word"], chunk=case["source_chunk"]):
+                result = self.run_validator(case)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_rewritten_source_must_be_marked_adapted(self) -> None:
         result = self.run_validator(
             valid_note(
@@ -424,6 +518,15 @@ class WordCoachPromptContractTests(unittest.TestCase):
         self.assertIn("低置信度词源", prompt)
         self.assertIn("基础词、目标词和联想词统一写成", prompt)
         self.assertIn("前缀、后缀和词根写成", prompt)
+
+    def test_prompt_defines_the_source_chunk_quality_gate(self) -> None:
+        prompt = (SKILL / "references" / "word-coach-json-prompt.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("稀疏的短语级学习线索", prompt)
+        self.assertIn("目标词本身、目标词的单个词形", prompt)
+        self.assertIn("只增加冠词，留空", prompt)
+        self.assertIn("词块和释义范围不一致", prompt)
 
 
 if __name__ == "__main__":

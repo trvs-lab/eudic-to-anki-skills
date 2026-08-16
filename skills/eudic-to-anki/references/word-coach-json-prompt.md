@@ -17,8 +17,8 @@
 - `source_context`: 欧路原始来源句；原样保留，没有时为空
 - `card_sentence`: 卡片正面例句
 - `sentence_origin`: `source`、`adapted`、`generated` 之一
-- `source_chunk`: 可选；最多一条，必须出现在 `card_sentence` 中
-- `source_chunk_meaning`: 与 `source_chunk` 同时出现的简短中文义
+- `source_chunk`: 可选；最多一条，按「来源词块」质量门槛提取
+- `source_chunk_meaning`: 与 `source_chunk` 同时出现，准确解释完整词块的简短中文义
 - `learning_group`: `learn`、`defer`、`skip`、`reject` 之一
 - `audio_html`: 可为空，由导入器生成
 - 欧路元数据：`category_id`、`category_name`、`add_time_utc`、`add_time_local`、`source`、`tags`
@@ -30,6 +30,29 @@
 3. 没有来源句：生成实用例句，使用 `generated`。默认 8–16 个英文词，包含目标词或有效词形，使用常见、高迁移义项，避免专名和额外难词。
 
 `source_context` 永远保存原始输入。生成句不得伪装为真实来源，也不得进入历史语境。
+
+## 来源词块
+
+`source_chunk` 是稀疏的短语级学习线索，不是必须填写的例句摘录。仅当连续原文片段同时满足以下条件时填写：
+
+- 来自 `source` 或 `adapted` 例句，并原样出现在 `card_sentence` 和 `source_context` 中；
+- 包含目标词或其有效词形；
+- 是值得整体记忆的固定搭配、短语动词、习语、术语或论元结构；
+- 提供目标词本身之外的新信息，能够帮助理解当前义项或迁移到新语境。
+
+目标词本身、目标词的单个词形、仅增加冠词或限定词的片段，以及含义透明的临时组合都留空。`source_chunk_meaning` 必须解释 `source_chunk` 的完整范围，不得只翻译目标词，也不得解释词块中没有出现的更大短语。
+
+正例：
+
+- `lead time` → `交付周期；前置时间`
+- `inflicted serious damage on` → `给……造成严重破坏`
+- `rely on` → `依靠；信赖`
+
+反例：
+
+- `medieval` → `中世纪的`：只重复目标词，留空。
+- `the cleft` → `裂口处`：只增加冠词，留空。
+- `lead` → `lead time 中的“交付周期”`：词块和释义范围不一致；改为完整的 `lead time`。
 
 ## 构词线索
 
@@ -85,7 +108,7 @@
 - 不复制欧路 `exp` 作为中文释义，也不批量复制欧路 `phon` 作为最终 IPA。
 - 中文释义使用一眼能懂的词典式标签，不写百科解释。
 - 英英释义使用日常英文讲清楚含义，不只列同义词，不混入中文。
-- `source_chunk` 只从 `source` 或 `adapted` 例句提取；生成例句留空。
+- `source_chunk` 遵守「来源词块」质量门槛；生成例句留空。
 - `word_family` 没有明确帮助时留空；非空时遵守「构词线索」的两行合同。
 - 完整 `skip` 条目仍满足所有内容标准。
 - `reject` 可以只保留用于诊断的原始内容，不需要补齐学习字段。
