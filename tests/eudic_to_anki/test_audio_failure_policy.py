@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from .fixtures import VALID_MP3_BYTES
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "skills" / "eudic-to-anki" / "scripts"
@@ -23,6 +24,15 @@ spec.loader.exec_module(ankiconnect_import)
 
 
 class AudioFailurePolicyTests(unittest.TestCase):
+    def test_mp3_validation_requires_complete_audio_frames(self) -> None:
+        id3_header = b"ID3\x04\x00\x00\x00\x00\x00\x00"
+        for data in (b"ID3x", id3_header, VALID_MP3_BYTES[:-1], b"\xff\xfb\x00\x00"):
+            with self.subTest(data=data[:10]):
+                with self.assertRaises(ankiconnect_import.AnkiImportError):
+                    ankiconnect_import._validate_mp3_bytes(data, word="anchor", source="test")
+        for data in (VALID_MP3_BYTES, id3_header + VALID_MP3_BYTES, VALID_MP3_BYTES + b"TAG" + bytes(125)):
+            ankiconnect_import._validate_mp3_bytes(data, word="anchor", source="test")
+
     def test_existing_anki_sound_is_reused_without_generation(self) -> None:
         class Client:
             def invoke(self, action: str, **_: object) -> object:
@@ -31,7 +41,7 @@ class AudioFailurePolicyTests(unittest.TestCase):
                 if action == "notesInfo":
                     return [{"fields": {"发音": {"value": "[sound:inflict.mp3]"}}}]
                 if action == "retrieveMediaFile":
-                    return base64.b64encode(b"ID3audio").decode("ascii")
+                    return base64.b64encode(VALID_MP3_BYTES).decode("ascii")
                 raise AssertionError(action)
 
         note = {
@@ -68,7 +78,7 @@ class AudioFailurePolicyTests(unittest.TestCase):
                 calls.append(command)
                 if len(calls) == 1:
                     raise subprocess.CalledProcessError(1, command, stderr="temporary")
-                output.write_bytes(b"ID3audio")
+                output.write_bytes(VALID_MP3_BYTES)
                 return object()
 
             with mock.patch.object(ankiconnect_import.subprocess, "run", fake_run):

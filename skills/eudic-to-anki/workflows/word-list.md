@@ -1,5 +1,7 @@
 # Workflow: User Word List
 
+手工词表不运行 `--cleanup-eudic` 或 `--resume-eudic-cleanup`，不构造 `eudic_source`，不删除欧路原词。
+
 1. 为每个完整单词或短语建立 coach note，并附带可区分遇见的时间；需要覆盖自动身份时可额外提供显式 `encounter_id`。
 2. 若没有真实来源句，生成包含目标词或有效词形的 8–16 词实用例句，并设置 `sentence_origin: "generated"`、`source_context: ""`。
 3. 将低价值但完整的条目标为 `skip`；只有无效片段或垃圾才标为 `reject`。

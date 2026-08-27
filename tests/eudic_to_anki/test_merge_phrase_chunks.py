@@ -47,6 +47,11 @@ class MergeContextAnchorTests(unittest.TestCase):
                         "notes": [
                             {
                                 "word": "Inflict",
+                                "eudic_source": {
+                                    "language": "en",
+                                    "category_id": "book-a",
+                                    "word": "Inflict",
+                                },
                                 "source": "eudic cloud",
                                 "source_context": "The storm inflicted serious damage on the town.",
                                 "category_id": "book-a",
@@ -72,7 +77,10 @@ class MergeContextAnchorTests(unittest.TestCase):
                 encoding="utf-8",
             )
             coach.write_text(
-                json.dumps({"notes": [coach_note()]}, ensure_ascii=False),
+                json.dumps(
+                    {"notes": [coach_note(eudic_source={"word": "wrong"})]},
+                    ensure_ascii=False,
+                ),
                 encoding="utf-8",
             )
             subprocess.run(
@@ -92,6 +100,11 @@ class MergeContextAnchorTests(unittest.TestCase):
             notes = json.loads(output.read_text(encoding="utf-8"))["notes"]
             self.assertEqual(len(notes), 2)
             self.assertEqual(notes[0]["category_id"], "book-a")
+            self.assertEqual(
+                notes[0]["eudic_source"],
+                {"language": "en", "category_id": "book-a", "word": "Inflict"},
+            )
+            self.assertIsNone(notes[1]["eudic_source"])
             self.assertEqual(notes[1]["add_time_utc"], "2026-08-11T01:00:00Z")
             self.assertEqual(
                 notes[1]["source_context"],
@@ -165,6 +178,7 @@ class MergeContextAnchorTests(unittest.TestCase):
                 writer = csv.DictWriter(
                     handle,
                     fieldnames=[
+                        "language",
                         "word",
                         "phon",
                         "context_line",
@@ -177,6 +191,7 @@ class MergeContextAnchorTests(unittest.TestCase):
                 writer.writeheader()
                 writer.writerow(
                     {
+                        "language": "en",
                         "word": "distort",
                         "phon": "/dɪˈstɔrt/",
                         "context_line": "Fear can distort your judgment.",
@@ -227,7 +242,50 @@ class MergeContextAnchorTests(unittest.TestCase):
             note = json.loads(output.read_text(encoding="utf-8"))["notes"][0]
             self.assertEqual(note["source_chunk"], "distort your judgment")
             self.assertEqual(note["category_name"], "Novel A")
+            self.assertEqual(
+                note["eudic_source"],
+                {"language": "en", "category_id": "book-a", "word": "distort"},
+            )
             self.assertEqual(note["add_time_utc"], "2026-08-10T01:00:00Z")
+
+    def test_placeholder_keeps_raw_word_and_zero_category_without_guessing_language(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            csv_path = root / "export.csv"
+            output = root / "partial.json"
+            with csv_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(
+                    handle, fieldnames=["language", "category_id", "word"]
+                )
+                writer.writeheader()
+                writer.writerows(
+                    [
+                        {"language": "en", "category_id": "0", "word": " Ａnchor "},
+                        {"language": "", "category_id": "book-a", "word": "legacy"},
+                    ]
+                )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SKILL / "scripts" / "build_dia_json_from_csv.py"),
+                    "--csv",
+                    str(csv_path),
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            notes = json.loads(output.read_text(encoding="utf-8"))["notes"]
+            self.assertEqual(notes[0]["word"], "Ａnchor")
+            self.assertEqual(
+                notes[0]["eudic_source"],
+                {"language": "en", "category_id": "0", "word": " Ａnchor "},
+            )
+            self.assertIsNone(notes[1]["eudic_source"])
 
 
 if __name__ == "__main__":

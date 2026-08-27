@@ -102,17 +102,27 @@ class RequestStats:
     category_requests: int = 0
     word_page_requests: int = 0
     retry_requests: int = 0
+    delete_requests: int = 0
 
     @property
     def total_requests(self) -> int:
-        return self.category_requests + self.word_page_requests + self.retry_requests
+        return (
+            self.category_requests
+            + self.word_page_requests
+            + self.retry_requests
+            + self.delete_requests
+        )
 
     def summary(self) -> str:
+        deletion_stats = (
+            f"deletes={self.delete_requests}, " if self.delete_requests else ""
+        )
         return (
             "Request stats: "
             f"categories={self.category_requests}, "
             f"word_pages={self.word_page_requests}, "
             f"retries={self.retry_requests}, "
+            f"{deletion_stats}"
             f"total={self.total_requests}"
         )
 
@@ -131,7 +141,7 @@ class RequestController:
         self.last_started_at: float | None = None
 
     def before_request(
-        self, request_kind: Literal["category", "word_page", "retry"]
+        self, request_kind: Literal["category", "word_page", "retry", "delete"]
     ) -> None:
         now = self.time_source.monotonic()
         if self.last_started_at is not None:
@@ -145,6 +155,8 @@ class RequestController:
             self.stats.category_requests += 1
         elif request_kind == "word_page":
             self.stats.word_page_requests += 1
+        elif request_kind == "delete":
+            self.stats.delete_requests += 1
         else:
             self.stats.retry_requests += 1
 
@@ -334,7 +346,14 @@ def _http_error_details(exc: urllib.error.HTTPError) -> tuple[str, str]:
 
 def _perform_http_request(request: urllib.request.Request) -> dict[str, Any]:
     try:
-        with urllib.request.urlopen(request, context=eudic_ssl_context()) as response:
+        options = {"timeout": 30} if request.get_method() == "DELETE" else {}
+        with urllib.request.urlopen(
+            request, context=eudic_ssl_context(), **options
+        ) as response:
+            if request.get_method() == "DELETE" and response.status != 204:
+                raise ApiError(
+                    f"Eudic deletion was not confirmed (HTTP {response.status}; expected 204)."
+                )
             raw = response.read().decode("utf-8")
             if response.status == 204:
                 return {}
@@ -405,7 +424,7 @@ def api_request(
     query: dict[str, Any] | None = None,
     body: dict[str, Any] | None = None,
     request_controller: RequestController,
-    request_kind: Literal["category", "word_page"],
+    request_kind: Literal["category", "word_page", "delete"],
 ) -> dict[str, Any]:
     url = f"{BASE_URL}{path}"
     if query:
@@ -427,6 +446,12 @@ def api_request(
     try:
         return _perform_http_request(request)
     except HttpResponseError as exc:
+        # A lost/failed DELETE response must be reconciled on the next run,
+        # never blindly replayed by the exporter's read retry policy.
+        if method == "DELETE":
+            raise ApiError(
+                f"Eudic deletion failed (HTTP {exc.code}); not retried."
+            ) from exc
         if not _is_rate_limit_error(exc):
             raise ApiError(str(exc)) from exc
         retry_after = _retry_after_seconds(
@@ -564,6 +589,7 @@ def filter_records(
 
         filtered.append(
             {
+                "language": category.language,
                 "category_id": category.id,
                 "category_name": category.name,
                 "word": item.get("word", ""),
@@ -660,6 +686,7 @@ def write_text_atomically(
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fieldnames = [
+        "language",
         "category_id",
         "category_name",
         "word",
@@ -756,11 +783,15 @@ def main() -> int:
             )
 
         category_label = "all_categories" if args.all_categories else selected[0].name
-        output_path = Path(args.output) if args.output else default_output_path(
-            fmt=args.format,
-            category_label=category_label,
-            start_date=args.start_date,
-            end_date=args.end_date,
+        output_path = (
+            Path(args.output)
+            if args.output
+            else default_output_path(
+                fmt=args.format,
+                category_label=category_label,
+                start_date=args.start_date,
+                end_date=args.end_date,
+            )
         )
 
         if args.format == "csv":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import csv
 import fcntl
 import importlib.util
 import io
@@ -151,7 +152,11 @@ class EudicExportSafetyTests(unittest.TestCase):
                 return FakeResponse(
                     {
                         "data": [
-                            {"id": str(index), "language": "en", "name": f"List {index}"}
+                            {
+                                "id": str(index),
+                                "language": "en",
+                                "name": f"List {index}",
+                            }
                             for index in range(1, 5)
                         ]
                     }
@@ -192,6 +197,9 @@ class EudicExportSafetyTests(unittest.TestCase):
 
             self.assertEqual(result, 0, stderr)
             self.assertTrue(output.exists())
+            rows = list(csv.DictReader(io.StringIO(output.read_text(encoding="utf-8"))))
+            self.assertEqual([row["language"] for row in rows], ["en"] * 4)
+            self.assertEqual(rows[0]["word"], "anchor")
             self.assertEqual(len(starts), 5)
             self.assertTrue(
                 all(
@@ -355,7 +363,9 @@ class EudicExportSafetyTests(unittest.TestCase):
                 self.assertEqual(clock.sleeps, [])
                 self.assertIn("valid Retry-After", stderr)
 
-    def test_failed_retry_stops_later_categories_and_preserves_existing_output(self) -> None:
+    def test_failed_retry_stops_later_categories_and_preserves_existing_output(
+        self,
+    ) -> None:
         clock = FakeClock()
         calls = 0
 

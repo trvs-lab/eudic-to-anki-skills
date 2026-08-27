@@ -28,6 +28,7 @@ Eudic → Agent-authored card → validation and Edge-TTS → Anki
   - `reject`: invalid fragments or garbage that never enter Anki
 - **One note per term**: an identical encounter is idempotent. A distinct encounter updates the existing note and resets its single card to new.
 - **Hard safety gates**: Edge-TTS retries once and then stops without a system TTS fallback. Anki templates are verified before import, and continuous date ranges use one protected export process.
+- **Eudic cleanup after import**: once every local note, encounter, card and audio file verifies, remove the corresponding source words without requiring cloud sync. Import failures delete nothing; unfinished cleanup can resume, and completed cleanup retains no backup or deletion history.
 
 ## Requirements
 

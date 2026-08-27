@@ -37,3 +37,7 @@ python3 scripts/run_with_login_zsh.py python3 scripts/eudic_export.py --list-cat
 - 日期过滤发生在本地。一次导出仍会查询一次分类，并逐分类分页读取生词，因此一条命令可能对应多次 HTTP 请求。
 - 导出器使用本机单实例锁，并将所有请求限制为最多 25 次／分钟。已有导出运行、限频重试失败或认证／网络／解析失败时，应停止完整制卡流程。
 - 限频响应只有在提供合法 `Retry-After` 时才重试当前请求一次；不要人工并发重试，也不要改成多条单日命令。
+
+## 导入后删除
+
+[官方生词本 API 文档 §1.7](https://my.eudic.net/OpenAPI/doc_api_study) 定义 `DELETE /api/open/v1/studylist/words`，JSON body 为 `language`、`category_id` 和原始 `words` 数组；成功返回 `204`。清理由导入器的 `--cleanup-eudic` 调用，不能直接拿导出文件或命令退出码代替整批本地核验。失败和续办策略见 `modules/import/README.md`。

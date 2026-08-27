@@ -22,6 +22,7 @@
 - `learning_group`: `learn`、`defer`、`skip`、`reject` 之一
 - `audio_html`: 可为空，由导入器生成
 - 欧路元数据：`category_id`、`category_name`、`add_time_utc`、`add_time_local`、`source`、`tags`
+- `eudic_source`：仅从导出占位原样保留的删除标识（`language`、`category_id`、原始 `word`）；由合并脚本复制，不由 coach 生成或改写。手工词表不填写。
 
 ## 例句决策
 

@@ -74,6 +74,7 @@ def main() -> int:
                     "learning_group": coach.get("learning_group", ""),
                     "audio_html": coach.get("audio_html", ""),
                     "source": "eudic cloud",
+                    "eudic_source": build.eudic_source_from_row(row),
                     "source_context": build.clean_context_line(
                         row.get("context_line") or ""
                     ),

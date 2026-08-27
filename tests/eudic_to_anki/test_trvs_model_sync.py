@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import base64
 import fcntl
 import importlib.util
 import io
@@ -11,6 +12,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from .fixtures import VALID_MP3_BYTES
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "skills" / "eudic-to-anki" / "scripts"
@@ -45,6 +47,7 @@ class MissingModelClient:
         self.ignore_actions: set[str] = set()
         self.notes: dict[int, dict[str, object]] = {}
         self.next_note_id = 100
+        self.media = {"anchor.mp3": base64.b64encode(VALID_MP3_BYTES).decode("ascii")}
 
     def set_existing(
         self,
@@ -125,6 +128,7 @@ class MissingModelClient:
             return [
                 {
                     "noteId": note_id,
+                    "modelName": "TRVS-Lab",
                     "fields": {
                         name: {"value": value}
                         for name, value in self.notes[int(note_id)]["fields"].items()
@@ -138,10 +142,24 @@ class MissingModelClient:
         if action == "cardsInfo":
             rows: list[dict[str, object]] = []
             for card_id in params["cards"]:
-                for note in self.notes.values():
+                for note_id, note in self.notes.items():
                     if int(note["card_id"]) == int(card_id):
-                        rows.append({"cardId": card_id, "deckName": note["deck"]})
+                        rows.append(
+                            {
+                                "cardId": card_id,
+                                "note": note_id,
+                                "deckName": note["deck"],
+                            }
+                        )
             return rows
+        if action == "retrieveMediaFile":
+            return self.media.get(str(params["filename"]), False)
+        if action == "storeMediaFile":
+            filename = str(params["filename"])
+            self.media[filename] = base64.b64encode(
+                Path(str(params["path"])).read_bytes()
+            ).decode("ascii")
+            return filename
         if action == "addNote":
             payload = params["note"]
             note_id = self.next_note_id
@@ -565,7 +583,9 @@ class ImportModelContractCliTests(unittest.TestCase):
         )
         self.assertNotIn("updateModelStyling", client.actions)
 
-    def test_compatible_update_adds_fields_then_updates_only_changed_content(self) -> None:
+    def test_compatible_update_adds_fields_then_updates_only_changed_content(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             input_path = write_import_input(root)
@@ -782,7 +802,9 @@ class ImportModelContractCliTests(unittest.TestCase):
         self.assertEqual(client.actions, [])
         prepare_audio.assert_not_called()
 
-    def test_model_spec_missing_context_anchor_field_stops_before_connecting(self) -> None:
+    def test_model_spec_missing_context_anchor_field_stops_before_connecting(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             input_path = write_import_input(root)

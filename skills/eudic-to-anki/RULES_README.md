@@ -199,9 +199,10 @@ prefix_rule(
 prefix_rule(
     pattern = ["python3", "scripts/ankiconnect_import.py"],
     decision = "allow",
-    justification = "Allow AnkiConnect import/ping when running from skill root.",
+    justification = "Allow AnkiConnect import/ping and verified Eudic cleanup/resume when running from skill root.",
     match = [
         "python3 scripts/ankiconnect_import.py --ping",
+        "python3 scripts/ankiconnect_import.py --resume-eudic-cleanup",
         "python3 scripts/ankiconnect_import.py --input <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_import.json --deck words --create-deck --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text \"{word}\" --output \"{output}\" --voice \"{voice}\"'",
     ],
 )
@@ -209,9 +210,10 @@ prefix_rule(
 prefix_rule(
     pattern = ["python3", "<HOME>/.agents/skills/eudic-to-anki/scripts/ankiconnect_import.py"],
     decision = "allow",
-    justification = "Allow AnkiConnect import/ping with absolute installed-skill path.",
+    justification = "Allow AnkiConnect import/ping and verified Eudic cleanup/resume with absolute installed-skill path.",
     match = [
         "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/ankiconnect_import.py --ping",
+        "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/ankiconnect_import.py --resume-eudic-cleanup",
         "python3 <HOME>/.agents/skills/eudic-to-anki/scripts/ankiconnect_import.py --input <HOME>/Documents/eudic-to-anki-temp/_day_2026-05-01_import.json --deck words --create-deck --audio-provider command --audio-format mp3 --audio-command 'python3 <HOME>/.agents/skills/eudic-to-anki/scripts/edge_tts_runner.py --text \"{word}\" --output \"{output}\" --voice \"{voice}\"'",
     ],
 )

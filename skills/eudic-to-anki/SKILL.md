@@ -1,6 +1,6 @@
 ---
 name: eudic-to-anki
-description: Export Eudic vocabulary encounters, author one-card Context Anchor notes, generate required Edge-TTS audio, and upsert them into managed Anki decks. Trigger for 把生词导入 Anki, Eudic words to Anki, or eudic-to-anki.
+description: Export Eudic vocabulary encounters, author Context Anchor notes with Edge-TTS audio, import into Anki, and remove successfully saved words from their source study lists. Trigger for 把生词导入 Anki, Eudic words to Anki, or eudic-to-anki.
 ---
 
 # Eudic to Anki
@@ -36,13 +36,14 @@ Resolve a relative range in the system local timezone as one inclusive start/end
 ## Execute the selected workflow
 
 1. Create the artifact directory in a separate command.
-2. Run `bash scripts/check_env.sh`.
-3. Run the selected workflow's export and placeholder commands exactly. Preserve every encounter and its `category_id`、`category_name`、`add_time_utc`、`add_time_local` and `context_line`.
-4. Author coach JSON using `references/word-coach-json-prompt.md`, merge it with every placeholder row, then validate the resulting `<IMPORT_JSON>`.
+2. Run `bash scripts/check_env.sh`. For Eudic workflows, first run `python3 scripts/ankiconnect_import.py --resume-eudic-cleanup` to finish any previous batch's pending cleanup. Stop on failure before starting a new export. This does not import, generate audio, or sync.
+3. Run the selected workflow's export and placeholder commands exactly. Preserve every encounter and its `category_id`、`category_name`、`add_time_utc`、`add_time_local` and `context_line`. Preserve `eudic_source` from the placeholder unchanged through the merge; it holds the language, source study-list ID and original word for deletion.
+4. If export returned zero records, report that no matching words remain and finish successfully without authoring, audio or Anki changes. Otherwise author coach JSON using `references/word-coach-json-prompt.md`, merge it with every placeholder row, then validate the resulting `<IMPORT_JSON>`.
 5. Preview `<IMPORT_JSON>` with `python3 scripts/ankiconnect_import.py --input <IMPORT_JSON> --deck words --create-deck --dry-run`. Confirm the model preflight is `create`, `update`, or `none`; stop on `blocked`.
 6. Import with required audio:
    `python3 scripts/ankiconnect_import.py --input <IMPORT_JSON> --deck words --create-deck --audio-provider command --audio-format mp3 --audio-command 'python3 scripts/edge_tts_runner.py --text "{word}" --output "{output}" --voice "{voice}"'`
-7. After success, run `bash scripts/cleanup_import_artifacts.sh`.
+   For Eudic workflows, append `--cleanup-eudic`. For manual word lists, omit it. Cleanup requires the entire local import and read-back verification to succeed, not cloud sync; `--no-sync` remains supported. Read `modules/import/README.md` for cleanup failure and resume behavior.
+7. Report import and Eudic cleanup separately. After success, run `bash scripts/cleanup_import_artifacts.sh`. Completed cleanup leaves no backup or deletion log; unfinished `.eudic-pending` files must remain available for the next run.
 
 If export reports a concurrent export, rate limit, network failure, or parse failure, stop the entire pipeline. Do not generate placeholders, coach content, audio, or Anki changes, and do not retry by splitting the range.
 

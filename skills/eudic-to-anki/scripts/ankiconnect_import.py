@@ -19,6 +19,8 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
+import eudic_cleanup
+from eudic_export import ApiError as EudicApiError
 from coach_fields import (
     MANAGED_LEARNING_GROUPS,
     normalize_optional_text,
@@ -147,6 +149,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--create-deck", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-sync", action="store_true")
+    parser.add_argument(
+        "--cleanup-eudic",
+        action="store_true",
+        help="Delete exported Eudic source words only after the whole local import verifies.",
+    )
+    parser.add_argument(
+        "--resume-eudic-cleanup",
+        action="store_true",
+        help="Revalidate and finish pending Eudic cleanup without reimporting or syncing.",
+    )
     parser.add_argument("--ping", action="store_true")
     parser.add_argument("--anki-url", default=DEFAULT_ANKI_URL)
     # Retained only to fail clearly for old invocations.
@@ -365,6 +377,7 @@ def upsert_context_anchor_notes(
     preserve_progress_on_update: bool = False,
     require_audio: bool = False,
     dry_run: bool = False,
+    expected_states: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, int]:
     """Apply one-note-per-normalized-word behavior at the AnkiConnect boundary."""
     if preserve_progress_on_update:
@@ -421,6 +434,12 @@ def upsert_context_anchor_notes(
                         fields["发音"] = replacement_sound
             if (not changed and not audio_repair) or fields is None:
                 summary["idempotent"] += 1
+                if expected_states is not None and not dry_run:
+                    expected_states[normalize_word_key(word)] = {
+                        "note_id": note_ids[0],
+                        "fields": existing_fields,
+                        "deck": current_deck,
+                    }
                 continue
             if current_group == "defer" and target_group == "learn":
                 summary["defer_to_learn"] += 1
@@ -450,6 +469,14 @@ def upsert_context_anchor_notes(
                 target_deck = managed_deck_name(base_deck, target_group)
                 if current_deck != target_deck:
                     client.invoke("changeDeck", cards=cards, deck=target_deck)
+            if expected_states is not None:
+                expected_states[normalize_word_key(word)] = {
+                    "note_id": note_ids[0],
+                    "fields": fields,
+                    "deck": managed_deck_name(base_deck, target_group)
+                    if changed
+                    else current_deck,
+                }
             continue
 
         fields: dict[str, str] | None = None
@@ -476,7 +503,103 @@ def upsert_context_anchor_notes(
         note_id = client.invoke("addNote", note=payload)
         if note_id is None:
             raise AnkiImportError(f"Anki refused new note for {word!r}.")
+        if expected_states is not None:
+            expected_states[normalize_word_key(word)] = {
+                "note_id": note_id,
+                "fields": fields,
+                "deck": payload["deckName"],
+            }
     return summary
+
+
+def verify_local_import(
+    client: AnkiConnectClient,
+    notes: list[dict[str, Any]],
+    *,
+    model: str,
+    base_deck: str,
+    expected_states: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, int]:
+    """Read back every term, its encounters, single card and stored MP3 before cleanup."""
+    groups = _group_notes(notes)
+    if expected_states is not None and len(expected_states) != len(groups):
+        raise AnkiImportError(
+            "The whole import did not complete; Eudic cleanup blocked."
+        )
+    verified: dict[str, int] = {}
+    media_cache: dict[str, bool] = {}
+    for group in groups:
+        word = field_value(group[-1], "word", "单词")
+        key = normalize_word_key(word)
+        ids = find_context_anchor_note_ids(client, model, word)
+        if len(ids) != 1:
+            raise AnkiImportError(
+                f"Local verification requires exactly one note for {word!r}."
+            )
+        rows = client.invoke("notesInfo", notes=ids) or []
+        if (
+            len(rows) != 1
+            or rows[0].get("noteId") != ids[0]
+            or rows[0].get("modelName") != model
+        ):
+            raise AnkiImportError(
+                f"Local note identity verification failed for {word!r}."
+            )
+        info = rows[0]
+        fields = info.get("fields") or {}
+        verify_payload_required_fields([{"fields": fields}], require_audio=True)
+        if (
+            _field_text_value(fields.get("规范词形")) != key
+            or normalize_word_key(_field_text_value(fields.get("单词"))) != key
+        ):
+            raise AnkiImportError(
+                f"Local word identity verification failed for {word!r}."
+            )
+        records = parse_encounters(fields.get("遇见记录"))
+        if not {encounter_id(note) for note in group}.issubset(
+            {record["id"] for record in records}
+        ):
+            raise AnkiImportError(f"Anki has not saved every encounter of {word!r}.")
+        cards = info.get("cards") or []
+        card_rows = client.invoke("cardsInfo", cards=cards) if len(cards) == 1 else []
+        if (
+            len(card_rows or []) != 1
+            or card_rows[0].get("cardId") != cards[0]
+            or card_rows[0].get("note") != ids[0]
+            or card_rows[0].get("deckName") not in managed_decks(base_deck)
+        ):
+            raise AnkiImportError(
+                f"Local single-card verification failed for {word!r}."
+            )
+        stored_group = _field_text_value(fields.get("学习分组"))
+        if stored_group not in MANAGED_LEARNING_GROUPS:
+            raise AnkiImportError(
+                f"Local learning group verification failed for {word!r}."
+            )
+        if expected_states is not None:
+            expected = expected_states[key]
+            if (
+                expected["note_id"] != ids[0]
+                or expected["deck"] != card_rows[0]["deckName"]
+                or any(
+                    _field_text_value(fields.get(name)) != _field_text_value(value)
+                    for name, value in expected["fields"].items()
+                )
+            ):
+                raise AnkiImportError(
+                    f"Anki write-back verification failed for {word!r}."
+                )
+        if not _anki_sound_is_valid(
+            client, _field_text_value(fields.get("发音")), word=word, cache=media_cache
+        ):
+            raise AnkiImportError(
+                f"Anki stored audio verification failed for {word!r}."
+            )
+        verified[key] = ids[0]
+    print(
+        f"Local import verified: terms={len(verified)}; notes, encounters, cards and audio checked."
+    )
+    return verified
 
 
 def sanitize_filename(text: str) -> str:
@@ -487,9 +610,59 @@ def sanitize_filename(text: str) -> str:
 def _validate_mp3_bytes(data: bytes, *, word: str, source: str) -> None:
     if len(data) < 4:
         raise AnkiImportError(f"Audio for {word!r} is missing or empty: {source}")
-    header = data[:3]
-    if header != b"ID3" and not (header[0] == 0xFF and header[1] & 0xE0 == 0xE0):
-        raise AnkiImportError(f"Audio for {word!r} is not a valid MP3: {source}")
+
+    def invalid(reason: str) -> None:
+        raise AnkiImportError(
+            f"Audio for {word!r} is not a valid MP3: {source} ({reason})"
+        )
+
+    offset, end = 0, len(data)
+    if data.startswith(b"ID3"):
+        if (
+            len(data) < 10
+            or data[3] not in (2, 3, 4)
+            or any(value & 0x80 for value in data[6:10])
+        ):
+            invalid("invalid ID3 header")
+        tag_size = sum(
+            value << shift for value, shift in zip(data[6:10], (21, 14, 7, 0))
+        )
+        offset = 10 + tag_size + (10 if data[3] == 4 and data[5] & 0x10 else 0)
+        if offset > end:
+            invalid("truncated ID3 tag")
+    if end >= 128 and data[end - 128 : end - 125] == b"TAG":
+        end -= 128  # Optional ID3v1 trailer is metadata, not an audio frame.
+
+    frames = 0
+    while offset < end:
+        if offset + 4 > end:
+            invalid("truncated MPEG header")
+        header = int.from_bytes(data[offset : offset + 4], "big")
+        version, layer = (header >> 19) & 3, (header >> 17) & 3
+        bitrate_index, sample_index = (header >> 12) & 15, (header >> 10) & 3
+        if (
+            header >> 21 != 0x7FF
+            or version == 1
+            or layer != 1
+            or bitrate_index in (0, 15)
+            or sample_index == 3
+        ):
+            invalid("invalid MPEG Layer III frame")
+        rates = (
+            (0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320)
+            if version == 3
+            else (0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160)
+        )
+        sample_rate = (44100, 48000, 32000)[sample_index] // {3: 1, 2: 2, 0: 4}[version]
+        frame_size = (144000 if version == 3 else 72000) * rates[
+            bitrate_index
+        ] // sample_rate + ((header >> 9) & 1)
+        if offset + frame_size > end:
+            invalid("truncated MPEG audio frame")
+        offset += frame_size
+        frames += 1
+    if not frames:
+        invalid("no MPEG audio frames")
 
 
 def _validate_mp3(path: Path, *, word: str) -> None:
@@ -783,6 +956,17 @@ def main() -> int:
     generated_audio_to_clean: list[Path] = []
     try:
         args = parse_args()
+        if args.resume_eudic_cleanup:
+            if args.input or args.dry_run or args.ping or args.cleanup_eudic:
+                raise AnkiImportError(
+                    "--resume-eudic-cleanup cannot be combined with import, preview or ping."
+                )
+            with anki_operation_lock():
+                return eudic_cleanup.resume_pending(
+                    AnkiConnectClient(args.anki_url),
+                    verify_local_import,
+                    anki_url=args.anki_url,
+                )
         if args.ping and not args.input:
             client = AnkiConnectClient(args.anki_url)
             version = client.invoke("version")
@@ -820,7 +1004,11 @@ def main() -> int:
             raise AnkiImportError(f"Input file not found: {input_path}")
         notes = load_notes(input_path)
         if not notes:
-            raise AnkiImportError("Input did not contain notes.")
+            print("No vocabulary records to import; no Anki or Eudic changes.")
+            return 0
+        cleanup_targets = (
+            eudic_cleanup.collect_targets(notes) if args.cleanup_eudic else []
+        )
 
         strict_spec = load_strict_model_spec(Path(args.model_spec), args.model)
         with ExitStack() as stack:
@@ -873,7 +1061,10 @@ def main() -> int:
                 generated_audio_to_clean.extend(prepared.values())
             for deck in managed_decks(args.deck):
                 ensure_deck(client, deck, args.create_deck)
-            upload_prepared_audio(client, notes, prepared, audio_format=args.audio_format)
+            upload_prepared_audio(
+                client, notes, prepared, audio_format=args.audio_format
+            )
+            expected_states = {} if args.cleanup_eudic else None
             summary = upsert_context_anchor_notes(
                 client,
                 notes,
@@ -882,15 +1073,58 @@ def main() -> int:
                 global_tags=args.tag,
                 preserve_progress_on_update=args.preserve_progress_on_update,
                 require_audio=True,
+                expected_states=expected_states,
             )
             print(f"Context Anchor import: {_summary_text(summary)}")
+            cleanup_status = 0
+            if args.cleanup_eudic:
+                verified = verify_local_import(
+                    client,
+                    notes,
+                    model=args.model,
+                    base_deck=args.deck,
+                    expected_states=expected_states,
+                )
+                try:
+                    pending = eudic_cleanup.save_verified_batch(
+                        cleanup_targets,
+                        verified,
+                        anki_url=args.anki_url,
+                        model=args.model,
+                        deck=args.deck,
+                    )
+                    if pending is None:
+                        print("No eligible Eudic source words to delete.")
+                    else:
+                        completed = eudic_cleanup.delete_pending(pending)
+                        print(
+                            f"Eudic cleanup complete: deleted={completed}; no completed records retained."
+                        )
+                except (
+                    eudic_cleanup.CleanupError,
+                    EudicApiError,
+                    OSError,
+                    ValueError,
+                ) as exc:
+                    cleanup_status = 2
+                    print(
+                        f"Local Anki import succeeded; Eudic cleanup incomplete: {exc}",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "Resume with --resume-eudic-cleanup; if saving the pending file failed, rerun the original import.",
+                        file=sys.stderr,
+                    )
             if not args.no_sync:
                 client.invoke("sync")
                 print("Triggered Anki sync.")
-            return 0
+            return cleanup_status
     except (
         AnkiImportError,
         ModelContractError,
+        eudic_cleanup.CleanupError,
+        EudicApiError,
+        OSError,
         ValueError,
         json.JSONDecodeError,
     ) as exc:

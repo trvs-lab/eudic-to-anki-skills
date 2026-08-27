@@ -61,6 +61,13 @@ def clean_context_line(raw: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(text)).strip()
 
 
+def eudic_source_from_row(row: dict[str, str]) -> dict[str, str] | None:
+    """Keep deletion identity separate from the normalized/coached Anki word."""
+    if not row.get("language") or not row.get("category_id") or not row.get("word"):
+        return None
+    return {key: row[key] for key in ("language", "category_id", "word")}
+
+
 def placeholder_from_row(
     row: dict[str, str], *, source: str, prefill_eudic_phon: bool
 ) -> dict[str, object] | None:
@@ -85,6 +92,7 @@ def placeholder_from_row(
         "learning_group": "",
         "audio_html": "",
         "source": source,
+        "eudic_source": eudic_source_from_row(row),
         "category_id": str(row.get("category_id") or ""),
         "category_name": str(row.get("category_name") or ""),
         "add_time_utc": str(row.get("add_time_utc") or ""),

@@ -28,6 +28,7 @@ COACH_FIELDS = (
 )
 ENCOUNTER_FIELDS = (
     "source",
+    "eudic_source",
     "source_context",
     "category_id",
     "category_name",
@@ -95,6 +96,8 @@ def main() -> int:
                 merged[field] = coach.get(field, "")
         for field in ENCOUNTER_FIELDS:
             default: object = [] if field == "tags" else ""
+            if field == "eudic_source":
+                default = None
             merged[field] = encounter.get(field, default)
         if len(candidates) == 1 and str(coach.get("sentence_origin") or "") == "source":
             merged["card_sentence"] = merged["source_context"]

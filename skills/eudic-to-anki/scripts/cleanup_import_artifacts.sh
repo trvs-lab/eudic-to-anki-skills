@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# After a successful Eudic→Anki import: clear only the external temp directory.
+# Clear external artifacts while preserving unfinished Eudic cleanup work.
 #
 # Default temp dir: ~/Documents/eudic-to-anki-temp
 # Optional override for testing/custom setups: EUDIC_TO_ANKI_TEMP_DIR=/path/to/temp
@@ -23,6 +23,7 @@ _clear_temp_dir_contents() {
     [[ ! -e "${path}" ]] && continue
     base="$(basename "${path}")"
     [[ "${base}" == "." || "${base}" == ".." ]] && continue
+    [[ "${base}" == ".eudic-pending" ]] && continue
     rm -rf "${path}"
   done
   shopt -u nullglob dotglob
@@ -32,5 +33,5 @@ if [[ -n "${KEEP_EUDIC_IMPORT_ARTIFACTS:-}" ]]; then
   echo "Skipped clearing temp dir (KEEP_EUDIC_IMPORT_ARTIFACTS=1)."
 else
   _clear_temp_dir_contents
-  echo "Done. Cleared ${TEMP_DIR}."
+  echo "Done. Cleared artifacts; unfinished .eudic-pending work is preserved."
 fi

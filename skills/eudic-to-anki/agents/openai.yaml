@@ -1,4 +1,4 @@
 interface:
   display_name: "Eudic Anki Pipeline"
   short_description: "Turn Eudic encounters into one-card Anki context anchors"
-  default_prompt: "Use $eudic-to-anki to export every Eudic encounter, author source/adapted/generated context sentences, classify notes into learn/defer/skip/reject, strictly synchronize and verify the one-card Context Anchor model before audio, generate required Edge-TTS audio with one retry and no fallback, and idempotently import into Anki."
+  default_prompt: "Use $eudic-to-anki to export Eudic encounters, author Context Anchor notes with required Edge-TTS audio, import them into Anki, and delete their Eudic source words only after the whole local import verifies."
