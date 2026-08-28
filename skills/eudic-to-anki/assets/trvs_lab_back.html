@@ -23,14 +23,14 @@
     {{#词族构词}}
     <div id="word-family-source" hidden>{{词族构词}}</div>
     {{/词族构词}}
-  </div>
 
-  {{#历史语境}}
-  <div class="answer-row history">
-    <span class="answer-label">历史语境</span>
-    <span>{{历史语境}}</span>
+    {{#历史语境}}
+    <div id="history-row" class="note-row history-row">
+      <span class="note-label">温故</span>
+      <div id="history-contexts" class="note-value history-contexts">{{历史语境}}</div>
+    </div>
+    {{/历史语境}}
   </div>
-  {{/历史语境}}
 
   <div class="encounter-meta">
     <span>遇见 {{遇见次数}} 次</span>
@@ -42,9 +42,29 @@
 (function () {
   var rail = document.getElementById("annotation-rail");
   var wordFamilySource = document.getElementById("word-family-source");
+  var historyRow = document.getElementById("history-row");
   if (rail && wordFamilySource) {
-    appendMorphologyRows(rail, readFieldText(wordFamilySource));
+    appendMorphologyRows(rail, readFieldText(wordFamilySource), historyRow);
     wordFamilySource.parentNode.removeChild(wordFamilySource);
+  }
+  if (historyRow) {
+    var history = document.getElementById("history-contexts");
+    var sentences = readFieldText(history)
+      .split(/\r?\n/)
+      .map(function (line) { return line.trim(); })
+      .filter(Boolean);
+    history.textContent = "";
+    sentences.forEach(function (sentence) {
+      var paragraph = document.createElement("p");
+      paragraph.textContent = sentence;
+      history.appendChild(paragraph);
+    });
+    if (sentences.length) {
+      if (historyRow.previousElementSibling) historyRow.classList.add("history-start");
+      highlightContextWord(history);
+    } else {
+      historyRow.parentNode.removeChild(historyRow);
+    }
   }
   if (rail && !rail.querySelector(".note-row")) rail.hidden = true;
 
@@ -55,7 +75,7 @@
     if (match) latest.textContent = match[0];
   }
 
-  function appendMorphologyRows(container, rawText) {
+  function appendMorphologyRows(container, rawText, before) {
     var lines = rawText
       .split(/\r?\n/)
       .map(function (line) { return line.trim(); })
@@ -65,7 +85,7 @@
       rows = [{ label: "构词", value: rawText.trim() }];
     }
 
-    var divideBeforeFirst = Boolean(container.querySelector(".note-row"));
+    var divideBeforeFirst = Boolean(container.querySelector(".context-note-row"));
     rows.forEach(function (item, index) {
       var row = document.createElement("div");
       row.className = "note-row morphology-row";
@@ -81,7 +101,7 @@
 
       row.appendChild(label);
       row.appendChild(noteValue);
-      container.appendChild(row);
+      container.insertBefore(row, before);
     });
   }
 
@@ -95,6 +115,7 @@
         output.push("\n");
       } else {
         output.push(readFieldText(node));
+        if (node.nodeName === "P" || node.nodeName === "DIV") output.push("\n");
       }
     }
     return output.join("");

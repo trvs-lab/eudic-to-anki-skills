@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>TRVS Lab · 历史语境卡片预览</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #eaf0ed;
+      --surface: #fbfdfc;
+      --ink: #1d2926;
+      --muted: #61716c;
+      --line: #d3ded8;
+      --active: #344f46;
+      --active-ink: #fbfdfc;
+      --chrome: #f0f2f1;
+      --shadow: 0 18px 60px rgba(29, 41, 38, 0.09);
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --canvas: #101815;
+      --surface: #17201e;
+      --ink: #e6eee9;
+      --muted: #a2b2aa;
+      --line: #34423c;
+      --active: #aac3b8;
+      --active-ink: #17201e;
+      --chrome: #232c28;
+      --shadow: 0 18px 60px rgba(0, 0, 0, 0.2);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--canvas);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, select { font: inherit; }
+    button, select, input { accent-color: var(--active); }
+    button:focus-visible, select:focus-visible, input:focus-visible {
+      outline: 2px solid var(--active);
+      outline-offset: 3px;
+    }
+    .shell { max-width: 1000px; margin: 0 auto; padding: 28px 24px 36px; }
+    .heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+    .heading h1 { margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -0.025em; }
+    .heading p { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+    .theme-control {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 11px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--ink);
+      background: var(--surface);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .theme-control svg { width: 15px; height: 15px; }
+    .theme-control[aria-pressed="true"] { border-color: var(--active); }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px 20px;
+      margin: 22px 0 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    .layout-controls {
+      display: flex;
+      gap: 3px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .layout-controls button {
+      min-height: 32px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 5px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .layout-controls button[aria-pressed="true"] { color: var(--active-ink); background: var(--active); }
+    .select-control { display: flex; align-items: center; gap: 8px; }
+    .select-control label { color: var(--muted); font-size: 12px; }
+    .select-control select {
+      min-width: 0;
+      min-height: 36px;
+      padding: 0 26px 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--ink);
+      background: var(--surface);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .stage { display: grid; justify-items: center; }
+    .preview-window {
+      width: min(100%, var(--preview-width, 438px));
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .window-bar {
+      position: relative;
+      display: flex;
+      align-items: center;
+      height: 29px;
+      padding: 0 9px;
+      border-bottom: 1px solid var(--line);
+      background: var(--chrome);
+    }
+    .window-lights { display: flex; gap: 7px; }
+    .window-lights i { width: 11px; height: 11px; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 50%; }
+    .window-lights i:nth-child(1) { background: #ff5f57; }
+    .window-lights i:nth-child(2) { background: #febc2e; }
+    .window-lights i:nth-child(3) { background: #28c840; }
+    .window-title { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 650; }
+    #preview-frame { display: block; width: 100%; height: 656px; border: 0; }
+    .window-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      min-height: 36px;
+      padding: 8px 12px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      background: var(--chrome);
+      font-size: 11px;
+    }
+    .preview-note {
+      width: min(100%, 620px);
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+      text-align: center;
+    }
+    .scope-note { margin: 8px 0 0; color: var(--muted); font-size: 11px; text-align: center; }
+    noscript { display: block; margin-top: 20px; }
+    @media (max-width: 520px) {
+      .shell { padding: 20px 12px 28px; }
+      .heading { gap: 12px; }
+      .heading h1 { font-size: 19px; }
+      .heading p { max-width: 250px; }
+      .toolbar { gap: 10px 12px; margin-top: 18px; }
+      .layout-controls { width: 100%; }
+      .layout-controls button { flex: 1; }
+      .select-control { flex-wrap: wrap; gap: 5px; }
+      .select-control select { max-width: 100%; }
+      .preview-note { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="heading">
+      <div>
+        <h1>历史语境卡片预览</h1>
+        <p>三种布局对照；历史语境的目标词沿用正面例句高亮。</p>
+      </div>
+      <button class="theme-control" id="theme-control" type="button" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20.6 14.1A8.7 8.7 0 0 1 9.9 3.4 8.8 8.8 0 1 0 20.6 14.1Z"/></svg>
+        <span>深色</span>
+      </button>
+    </header>
+
+    <section class="toolbar" aria-label="预览设置">
+      <div class="layout-controls" role="group" aria-label="历史语境布局">
+        <button type="button" data-layout="separate" aria-pressed="true">独立卡片</button>
+        <button type="button" data-layout="merged" aria-pressed="false">合并卡片</button>
+        <button type="button" data-layout="current" aria-pressed="false">当前样式</button>
+      </div>
+      <div class="select-control">
+        <label for="sample-control">内容</label>
+        <select id="sample-control">
+          <option value="screenshot">截图示例 · 1 条历史</option>
+          <option value="multiple">截图词条 · 3 条历史</option>
+          <option value="complete">来源 + 构词 + 历史</option>
+          <option value="history-only">只有历史语境</option>
+          <option value="no-history">没有历史语境</option>
+        </select>
+      </div>
+      <div class="select-control">
+        <label for="width-control">宽度</label>
+        <select id="width-control">
+          <option value="438">截图 · 438 px</option>
+          <option value="390">手机 · 390 px</option>
+          <option value="680">宽屏 · 680 px</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="stage" aria-label="卡片效果">
+      <div class="preview-window" id="preview-window">
+        <div class="window-bar" aria-hidden="true">
+          <div class="window-lights"><i></i><i></i><i></i></div>
+          <span class="window-title">预览</span>
+        </div>
+        <iframe id="preview-frame" title="TRVS-Lab 卡片背面"></iframe>
+        <div class="window-footer">
+          <span id="layout-caption">历史语境 · 独立卡片</span>
+          <span>布局预览 · 不含音频</span>
+        </div>
+      </div>
+      <p class="preview-note" id="sample-note" aria-live="polite"></p>
+      <p class="scope-note">仅预览页面，不修改正式模板或 Anki 数据。</p>
+    </section>
+    <noscript>此预览需要启用 JavaScript 才能显示卡片和切换内容。</noscript>
+  </main>
+
+  <!-- Current model snapshot with marked preview-only hooks for history highlighting and grouping. -->
+  <script id="model-css" type="text/plain">
+/* trvs-style-version: context-anchor-v3 */
+html,
+body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.card {
+  --ink: #1d2926;
+  --muted: #61716c;
+  --faint: #8b9995;
+  --line: #dfe7e3;
+  --ipa: #4f6f67;
+  --mark: rgba(75, 106, 98, 0.42);
+  --rail: #8ba49d;
+  --note: #f1f6f4;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  box-sizing: border-box;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 28px 22px 36px;
+  color: var(--ink);
+  background: #fbfdfc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+}
+
+.context-anchor-card { text-align: center; }
+.word-button {
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  min-width: 0;
+  min-height: 0;
+  outline: none;
+  color: var(--ink);
+  background: transparent;
+  text-decoration: none;
+  font-family: Georgia, serif !important;
+  font-size: 34px !important;
+  font-weight: 650 !important;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: transform 140ms var(--ease-out);
+}
+.word-button:active { transform: scale(0.97); }
+.word-button:hover,
+.word-button:active,
+.word-button:focus {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: var(--ink);
+  background: transparent !important;
+}
+.word-button:focus { outline: none !important; }
+.word-button:focus-visible { outline: 3px solid rgba(79, 111, 103, 0.18) !important; outline-offset: 3px; }
+.word-audio { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+.card-sentence { width: fit-content; max-width: 100%; margin: 22px auto 0; font: 400 22px/1.55 Georgia, serif; text-align: left; }
+mark { color: inherit; background: transparent; font-weight: 700; text-decoration: underline; text-decoration-color: var(--mark); text-decoration-thickness: 1.5px; text-underline-offset: 5px; }
+
+.answer-panel { margin-top: 26px; padding-top: 24px; border-top: 1px solid var(--line); }
+.answer-primary { font-size: 23px; font-weight: 650; line-height: 1.45; }
+.answer-ipa { margin-top: 8px; color: var(--ipa); font: 19px/1.4 Georgia, serif; }
+.answer-definition { margin-top: 14px; font: 19px/1.55 Georgia, serif; }
+.answer-row { display: grid; grid-template-columns: 86px 1fr; gap: 12px; margin-top: 18px; line-height: 1.55; }
+.answer-label { color: var(--muted); font-size: 13px; letter-spacing: 0.05em; }
+.annotation-rail { position: relative; margin-top: 20px; padding: 17px 16px 17px 18px; border-radius: 0 12px 12px 0; background: var(--note); }
+.annotation-rail::before { position: absolute; inset: 0 auto 0 0; width: 2px; background: var(--rail); content: ""; }
+.note-row { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: 10px; align-items: baseline; font-size: 15px; line-height: 1.55; }
+.note-row + .note-row { margin-top: 11px; }
+.note-row.morphology-start { position: relative; margin-top: 17px; padding-top: 16px; }
+.note-row.morphology-start::before { position: absolute; top: 0; right: 0; left: 70px; height: 1px; background: var(--line); content: ""; }
+.note-label { color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: 0.04em; white-space: nowrap; }
+.note-value { min-width: 0; }
+.term { font-weight: 650; }
+.gloss { color: var(--muted); }
+.derivation-result { color: var(--ink); font-weight: 650; }
+.encounter-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 20px; color: var(--faint); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.nightMode .card { --ink: rgba(246, 252, 249, 0.91); --muted: rgba(220, 236, 230, 0.6); --faint: rgba(220, 236, 230, 0.45); --line: rgba(220, 236, 230, 0.12); --ipa: #9bb7af; --mark: rgba(155, 183, 175, 0.45); --rail: #708f87; --note: rgba(155, 183, 175, 0.065); background: #17201e; }
+
+@media (max-width: 480px) {
+  .note-row { grid-template-columns: 54px minmax(0, 1fr); gap: 8px; }
+  .note-row.morphology-start::before { left: 62px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .word-button { transition-duration: 0.01ms; }
+}
+  </script>
+  <template id="model-front">
+<main class="context-anchor-card">
+  <button class="word-button" type="button" onclick="playAudio()" aria-label="播放 {{单词}} 的发音">
+    {{单词}}
+  </button>
+  <div id="word-audio" class="word-audio" aria-hidden="true">{{发音}}</div>
+  <div id="card-sentence" class="card-sentence">{{卡片例句}}</div>
+</main>
+
+<script>
+(function () {
+  var wordButton = document.querySelector(".word-button");
+  var word = wordButton ? wordButton.textContent.trim() : "";
+  var sentence = document.getElementById("card-sentence");
+  if (!word || !sentence) return;
+
+  var forms = buildHighlightForms(word);
+  if (!forms.length) return;
+  var pattern = forms
+    .sort(function (a, b) { return b.length - a.length; })
+    .map(escapeRegExp)
+    .join("|");
+  highlightTextNodes(sentence, new RegExp("\\b(?:" + pattern + ")\\b", "gi"));
+
+  // Preview-only: reuse the front's forms, text-node handling, and mark styling.
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".history-list, .answer-row.history > span:last-child")
+      .forEach(function (context) {
+        highlightTextNodes(context, new RegExp("\\b(?:" + pattern + ")\\b", "gi"));
+      });
+  }, { once: true });
+  // End preview-only history highlighting.
+
+  function buildHighlightForms(rawWord) {
+    var forms = {};
+    var candidates = rawWord
+      .toLowerCase()
+      .split(/[;,/|]/)
+      .map(cleanHeadword)
+      .filter(Boolean);
+    addForm(forms, cleanHeadword(rawWord));
+    candidates.forEach(function (candidate) {
+      addEnglishForms(candidate, forms);
+    });
+    return Object.keys(forms);
+  }
+
+  function cleanHeadword(value) {
+    return value
+      .replace(/\[[^\]]*\]|\([^)]*\)/g, " ")
+      .replace(/^to\s+/i, "")
+      .replace(/^[^a-z]+|[^a-z]+$/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function addEnglishForms(base, forms) {
+    if (!base) return;
+    addForm(forms, base);
+    if (base.indexOf(" ") !== -1 || base.indexOf("-") !== -1) return;
+    addIrregularForms(base, forms);
+    if (base.length < 3) return;
+    addVerbForms(base, forms);
+    addPluralForms(base, forms);
+  }
+
+  function addVerbForms(base, forms) {
+    var last = base.charAt(base.length - 1);
+    var beforeLast = base.charAt(base.length - 2);
+    if (/[^aeiou]y$/.test(base)) {
+      addForm(forms, base.slice(0, -1) + "ies");
+      addForm(forms, base.slice(0, -1) + "ied");
+      addForm(forms, base + "ing");
+      return;
+    }
+    if (/ie$/.test(base)) {
+      addForm(forms, base + "s");
+      addForm(forms, base + "d");
+      addForm(forms, base.slice(0, -2) + "ying");
+      return;
+    }
+    if (/e$/.test(base)) {
+      addForm(forms, base + "s");
+      addForm(forms, base + "d");
+      addForm(forms, base.slice(0, -1) + "ing");
+      return;
+    }
+    if (/c$/.test(base)) {
+      addForm(forms, base + "s");
+      addForm(forms, base + "ked");
+      addForm(forms, base + "king");
+      return;
+    }
+    addForm(forms, base + (/(s|x|z|ch|sh|o)$/.test(base) ? "es" : "s"));
+    addForm(forms, base + "ed");
+    addForm(forms, base + "ing");
+    if (
+      isConsonant(last) &&
+      isVowel(beforeLast) &&
+      isConsonant(base.charAt(base.length - 3)) &&
+      !/[wxy]$/.test(base)
+    ) {
+      addForm(forms, base + last + "ed");
+      addForm(forms, base + last + "ing");
+    }
+  }
+
+  function addPluralForms(base, forms) {
+    if (/[^aeiou]y$/.test(base)) {
+      addForm(forms, base.slice(0, -1) + "ies");
+    } else if (/(s|x|z|ch|sh)$/.test(base)) {
+      addForm(forms, base + "es");
+    } else if (/fe?$/.test(base)) {
+      addForm(forms, base.replace(/fe?$/, "ves"));
+    } else {
+      addForm(forms, base + "s");
+    }
+  }
+
+  function addIrregularForms(base, forms) {
+    var irregulars = {
+      "be": "am are is was were been being",
+      "begin": "began begun beginning begins",
+      "break": "broke broken breaking breaks",
+      "bring": "brought bringing brings",
+      "buy": "bought buying buys",
+      "catch": "caught catching catches",
+      "choose": "chose chosen choosing chooses",
+      "come": "came coming comes",
+      "do": "did done doing does",
+      "drink": "drank drunk drinking drinks",
+      "drive": "drove driven driving drives",
+      "eat": "ate eaten eating eats",
+      "fall": "fell fallen falling falls",
+      "feel": "felt feeling feels",
+      "find": "found finding finds",
+      "fly": "flew flown flying flies",
+      "forget": "forgot forgotten forgetting forgets",
+      "get": "got gotten getting gets",
+      "give": "gave given giving gives",
+      "go": "went gone going goes",
+      "grow": "grew grown growing grows",
+      "have": "had having has",
+      "keep": "kept keeping keeps",
+      "know": "knew known knowing knows",
+      "leave": "left leaving leaves",
+      "lie": "lay lain lying lies",
+      "lose": "lost losing loses",
+      "make": "made making makes",
+      "read": "read reading reads",
+      "ride": "rode ridden riding rides",
+      "ring": "rang rung ringing rings",
+      "rise": "rose risen rising rises",
+      "run": "ran running runs",
+      "say": "said saying says",
+      "see": "saw seen seeing sees",
+      "show": "showed shown showing shows",
+      "speak": "spoke spoken speaking speaks",
+      "take": "took taken taking takes",
+      "teach": "taught teaching teaches",
+      "think": "thought thinking thinks",
+      "throw": "threw thrown throwing throws",
+      "wear": "wore worn wearing wears",
+      "win": "won winning wins",
+      "write": "wrote written writing writes"
+    };
+    if (!irregulars[base]) return;
+    irregulars[base].split(/\s+/).forEach(function (form) {
+      addForm(forms, form);
+    });
+  }
+
+  function addForm(forms, value) {
+    var form = cleanHeadword(value);
+    if (form) forms[form] = true;
+  }
+
+  function isVowel(value) {
+    return /[aeiou]/.test(value);
+  }
+
+  function isConsonant(value) {
+    return /[bcdfghjklmnpqrstvwxyz]/.test(value);
+  }
+
+  function highlightTextNodes(root, regex) {
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        regex.lastIndex = 0;
+        return node.nodeValue.trim() && regex.test(node.nodeValue)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      }
+    });
+    var nodes = [];
+    var node;
+    while ((node = walker.nextNode())) nodes.push(node);
+    nodes.forEach(function (textNode) {
+      var source = textNode.nodeValue;
+      var fragment = document.createDocumentFragment();
+      var cursor = 0;
+      regex.lastIndex = 0;
+      source.replace(regex, function (match, offset) {
+        fragment.appendChild(document.createTextNode(source.slice(cursor, offset)));
+        var mark = document.createElement("mark");
+        mark.textContent = match;
+        fragment.appendChild(mark);
+        cursor = offset + match.length;
+        return match;
+      });
+      fragment.appendChild(document.createTextNode(source.slice(cursor)));
+      textNode.parentNode.replaceChild(fragment, textNode);
+    });
+  }
+
+  function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+})();
+
+function playAudio() {
+  var root = document.getElementById("word-audio");
+  var control = root && root.querySelector(".replay-button, .soundLink, [onclick]");
+  if (control) control.click();
+}
+</script>
+  </template>
+  <template id="model-back">
+{{FrontSide}}
+
+<section class="answer-panel">
+  <div class="answer-primary">{{语境释义}}</div>
+  <div class="answer-ipa">{{音标}}</div>
+  <div class="answer-definition">{{英英}}</div>
+
+  <div id="annotation-rail" class="annotation-rail">
+    {{#来源词块}}
+    <div class="note-row context-note-row">
+      <span class="note-label">来源</span>
+      <span class="note-value">{{来源词块}}</span>
+    </div>
+    {{/来源词块}}
+
+    {{#词块释义}}
+    <div class="note-row context-note-row">
+      <span class="note-label">释义</span>
+      <span class="note-value">{{词块释义}}</span>
+    </div>
+    {{/词块释义}}
+
+    {{#词族构词}}
+    <div id="word-family-source" hidden>{{词族构词}}</div>
+    {{/词族构词}}
+  </div>
+
+  {{#历史语境}}
+  <div class="answer-row history">
+    <span class="answer-label">温故</span>
+    <span>{{历史语境}}</span>
+  </div>
+  {{/历史语境}}
+
+  <div class="encounter-meta">
+    <span>遇见 {{遇见次数}} 次</span>
+    <span>最近遇见 <time id="latest-encounter">{{最近遇见}}</time></span>
+  </div>
+</section>
+
+<script>
+(function () {
+  var rail = document.getElementById("annotation-rail");
+  var wordFamilySource = document.getElementById("word-family-source");
+  if (rail && wordFamilySource) {
+    appendMorphologyRows(rail, readFieldText(wordFamilySource));
+    wordFamilySource.parentNode.removeChild(wordFamilySource);
+  }
+
+  // Preview-only: append history after the dynamically rendered morphology rows.
+  var mergedHistory = document.getElementById("merged-history");
+  if (rail && mergedHistory) {
+    if (rail.querySelector(".note-row")) mergedHistory.classList.add("history-start");
+    rail.appendChild(mergedHistory);
+  }
+  // End preview-only history grouping.
+
+  if (rail && !rail.querySelector(".note-row")) rail.hidden = true;
+
+  var latest = document.getElementById("latest-encounter");
+  if (latest) {
+    var value = latest.textContent.trim();
+    var match = value.match(/^\d{4}-\d{2}-\d{2}/);
+    if (match) latest.textContent = match[0];
+  }
+
+  function appendMorphologyRows(container, rawText) {
+    var lines = rawText
+      .split(/\r?\n/)
+      .map(function (line) { return line.trim(); })
+      .filter(Boolean);
+    var rows = lines.map(parseMorphologyLine);
+    if (!rows.length || rows.some(function (row) { return !row; })) {
+      rows = [{ label: "构词", value: rawText.trim() }];
+    }
+
+    var divideBeforeFirst = Boolean(container.querySelector(".note-row"));
+    rows.forEach(function (item, index) {
+      var row = document.createElement("div");
+      row.className = "note-row morphology-row";
+      if (index === 0 && divideBeforeFirst) row.classList.add("morphology-start");
+
+      var label = document.createElement("span");
+      label.className = "note-label";
+      label.textContent = item.label;
+
+      var noteValue = document.createElement("span");
+      noteValue.className = "note-value";
+      appendStyledMorphology(noteValue, item.value);
+
+      row.appendChild(label);
+      row.appendChild(noteValue);
+      container.appendChild(row);
+    });
+  }
+
+  function readFieldText(root) {
+    var output = [];
+    for (var index = 0; index < root.childNodes.length; index += 1) {
+      var node = root.childNodes[index];
+      if (node.nodeType === Node.TEXT_NODE) {
+        output.push(node.nodeValue);
+      } else if (node.nodeName === "BR") {
+        output.push("\n");
+      } else {
+        output.push(readFieldText(node));
+      }
+    }
+    return output.join("");
+  }
+
+  function parseMorphologyLine(line) {
+    if (line.indexOf("拆解：") === 0) {
+      return { label: "拆解", value: line.slice(3).trim() };
+    }
+    if (line.indexOf("联想：") === 0) {
+      return { label: "联想", value: line.slice(3).trim() };
+    }
+    return null;
+  }
+
+  function appendStyledMorphology(container, text) {
+    var pattern = /([-A-Za-z/']+)「([^」]+)」/g;
+    var resultStart = text.lastIndexOf("→");
+    var cursor = 0;
+    var match;
+    while ((match = pattern.exec(text))) {
+      container.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+
+      var isResult = resultStart !== -1 && match.index > resultStart;
+      var term = document.createElement("span");
+      term.className = isResult ? "term derivation-result" : "term";
+      term.textContent = match[1];
+      container.appendChild(term);
+
+      var gloss = document.createElement("span");
+      gloss.className = isResult ? "gloss derivation-result" : "gloss";
+      gloss.textContent = "「" + match[2] + "」";
+      container.appendChild(gloss);
+      cursor = pattern.lastIndex;
+    }
+    container.appendChild(document.createTextNode(text.slice(cursor)));
+  }
+})();
+</script>
+  </template>
+
+  <script>
+    "use strict";
+
+    const modelCss = document.getElementById("model-css").textContent;
+    const modelFront = document.getElementById("model-front").innerHTML;
+    const modelBack = document.getElementById("model-back").innerHTML;
+    const frame = document.getElementById("preview-frame");
+    const previewWindow = document.getElementById("preview-window");
+    const sampleControl = document.getElementById("sample-control");
+    const widthControl = document.getElementById("width-control");
+    const themeControl = document.getElementById("theme-control");
+    const layoutControls = [...document.querySelectorAll("[data-layout]")];
+    const layoutNames = { separate: "独立卡片", merged: "合并卡片", current: "当前样式" };
+    const state = { layout: "separate", sample: "screenshot", width: "438", dark: false };
+
+    const screenshotNote = {
+      word: "sinister",
+      sentence: "Harry thought of the sinister winged horses he had seen that night.",
+      meaning: "adj. 阴森的；邪恶不祥的",
+      ipa: "/ˈsɪnɪstər/",
+      definition: "seeming evil, threatening, or likely to cause harm",
+      chunk: "sinister winged horses",
+      chunkMeaning: "阴森不祥的有翼马",
+      family: "",
+      history: ["The pulsating thing had the sinister look of a diseased organ."],
+      count: 2,
+      date: "2026-08-27",
+      description: "沿用截图中的内容，只调整历史语境的容器与排版。"
+    };
+    const threeContexts = [
+      ...screenshotNote.history,
+      "There was something sinister about the empty house at the end of the street.",
+      "At first the message seemed harmless, but its meaning soon became more sinister."
+    ];
+    const samples = {
+      screenshot: screenshotNote,
+      multiple: {
+        ...screenshotNote,
+        history: threeContexts,
+        count: 4,
+        description: "保留截图词条，补充两句排版示例，用于检查多条历史的间距；补充内容不代表真实阅读记录。"
+      },
+      complete: {
+        word: "inflict",
+        sentence: "The storm inflicted serious damage on the town.",
+        meaning: "v. 使遭受；造成",
+        ipa: "/ɪnˈflɪkt/",
+        definition: "to make someone suffer something unpleasant",
+        chunk: "inflicted serious damage on",
+        chunkMeaning: "给……造成严重破坏",
+        family: "拆解：in-「在……上」+ flict「打击」→ inflict「v. 使遭受；造成」\n联想：conflict「n. 冲突」、afflict「v. 使痛苦」",
+        history: [
+          "The flood inflicted more damage on local farms.",
+          "His careless words inflicted lasting pain on his family.",
+          "The long delay inflicted heavy losses on the company."
+        ],
+        count: 4,
+        date: "2026-08-27",
+        description: "完整内容示例：来源、释义、拆解、联想与三条历史同时出现。历史句子仅用于布局演示。"
+      },
+      "history-only": {
+        ...screenshotNote,
+        chunk: "",
+        chunkMeaning: "",
+        history: threeContexts,
+        count: 4,
+        description: "来源词块与构词线索均为空时，只显示历史语境，不保留空白注释。补充句子仅用于布局演示。"
+      },
+      "no-history": {
+        ...screenshotNote,
+        history: [],
+        count: 1,
+        description: "没有历史语境时，不显示对应区域，遇见统计直接跟在来源注释之后。此为状态演示。"
+      }
+    };
+
+    const separateHistory = `
+      {{#历史语境}}
+      <section class="annotation-rail history-rail" aria-label="历史语境">
+        <div class="note-row">
+          <span class="note-label">温故</span>
+          <div class="note-value history-list">{{历史语境}}</div>
+        </div>
+      </section>
+      {{/历史语境}}`;
+
+    const mergedHistory = `
+      {{#历史语境}}
+      <section id="merged-history" class="note-row" aria-label="历史语境">
+        <span class="note-label">温故</span>
+        <div class="note-value history-list">{{历史语境}}</div>
+      </section>
+      {{/历史语境}}`;
+
+    const previewCss = `
+      /* Frame-only defaults: reproduce the card viewport without changing model assets. */
+      html { margin: 0; background: #fbfdfc; }
+      html.nightMode { color-scheme: dark; background: #17201e; }
+      body.card { min-height: 656px; font-size: 14px; }
+      .word-button:disabled { opacity: 1; cursor: default; }
+      .history-list p { margin: 0; }
+      .history-list p + p { margin-top: 12px; }
+      .note-row.history-start { position: relative; margin-top: 17px; padding-top: 16px; }
+      .note-row.history-start::before { position: absolute; top: 0; right: 0; left: 70px; height: 1px; background: var(--line); content: ""; }
+      @media (max-width: 480px) {
+        .note-row.history-start::before { left: 62px; }
+      }
+    `;
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, character => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[character]);
+    }
+
+    // These model templates use non-nested, positive field conditions only.
+    function renderTemplate(template, fields) {
+      return template
+        .replace(/{{#([^{}]+)}}([\s\S]*?){{\/\1}}/g, (_, key, content) => fields[key] ? content : "")
+        .replace(/{{([^{}]+)}}/g, (_, key) => fields[key] ?? "");
+    }
+
+    function fitFrame() {
+      const card = frame.contentDocument?.body;
+      if (card) frame.style.height = Math.ceil(card.getBoundingClientRect().height) + "px";
+    }
+
+    let frameObserver;
+    frame.addEventListener("load", () => {
+      frameObserver?.disconnect();
+      const card = frame.contentDocument?.body;
+      if (!card) return;
+      const wordButton = card.querySelector(".word-button");
+      if (wordButton) {
+        wordButton.disabled = true;
+        wordButton.setAttribute("aria-label", "单词：" + samples[state.sample].word + "；本预览不含音频");
+      }
+      frameObserver = new ResizeObserver(fitFrame);
+      frameObserver.observe(card);
+      fitFrame();
+    });
+
+    function render() {
+      const sample = samples[state.sample];
+      const fields = {
+        "单词": escapeHtml(sample.word),
+        "卡片例句": escapeHtml(sample.sentence),
+        "语境释义": escapeHtml(sample.meaning),
+        "音标": escapeHtml(sample.ipa),
+        "英英": escapeHtml(sample.definition),
+        "来源词块": escapeHtml(sample.chunk),
+        "词块释义": escapeHtml(sample.chunkMeaning),
+        "词族构词": escapeHtml(sample.family).replace(/\n/g, "<br>"),
+        "历史语境": state.layout !== "current"
+          ? sample.history.map(sentence => "<p>" + escapeHtml(sentence) + "</p>").join("")
+          : sample.history.map(escapeHtml).join("<br>"),
+        "遇见次数": String(sample.count),
+        "最近遇见": escapeHtml(sample.date),
+        "发音": ""
+      };
+      fields.FrontSide = renderTemplate(modelFront, fields);
+      const back = state.layout !== "current"
+        ? modelBack.replace(/{{#历史语境}}[\s\S]*?{{\/历史语境}}/,
+            state.layout === "merged" ? mergedHistory : separateHistory)
+        : modelBack;
+
+      previewWindow.style.setProperty("--preview-width", state.width + "px");
+      document.documentElement.dataset.theme = state.dark ? "dark" : "light";
+      themeControl.setAttribute("aria-pressed", String(state.dark));
+      layoutControls.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.layout === state.layout)));
+      sampleControl.value = state.sample;
+      widthControl.value = state.width;
+      document.getElementById("layout-caption").textContent = "历史语境 · " + layoutNames[state.layout];
+      document.getElementById("sample-note").textContent = sample.description;
+
+      // All markup is local and authored in this file. No Anki or network API is called.
+      frame.srcdoc = `<!doctype html><html lang="zh-CN" class="${state.dark ? "nightMode" : ""}">
+        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>${escapeHtml(sample.word)} · 卡片预览</title><style>${modelCss}\n${previewCss}</style></head>
+        <body class="card">${renderTemplate(back, fields)}</body></html>`;
+    }
+
+    layoutControls.forEach(button => button.addEventListener("click", () => {
+      state.layout = button.dataset.layout;
+      render();
+    }));
+    sampleControl.addEventListener("change", () => { state.sample = sampleControl.value; render(); });
+    widthControl.addEventListener("change", () => { state.width = widthControl.value; render(); });
+    themeControl.addEventListener("click", () => { state.dark = !state.dark; render(); });
+    render();
+  </script>
+</body>
+</html>

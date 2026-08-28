@@ -7,11 +7,10 @@
 </main>
 
 <script>
-(function () {
+function highlightContextWord(root) {
   var wordButton = document.querySelector(".word-button");
   var word = wordButton ? wordButton.textContent.trim() : "";
-  var sentence = document.getElementById("card-sentence");
-  if (!word || !sentence) return;
+  if (!word || !root) return;
 
   var forms = buildHighlightForms(word);
   if (!forms.length) return;
@@ -19,7 +18,7 @@
     .sort(function (a, b) { return b.length - a.length; })
     .map(escapeRegExp)
     .join("|");
-  highlightTextNodes(sentence, new RegExp("\\b(?:" + pattern + ")\\b", "gi"));
+  highlightTextNodes(root, new RegExp("\\b(?:" + pattern + ")\\b", "gi"));
 
   function buildHighlightForms(rawWord) {
     var forms = {};
@@ -176,6 +175,7 @@
   function highlightTextNodes(root, regex) {
     var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode: function (node) {
+        if (node.parentElement.closest("mark, script, style")) return NodeFilter.FILTER_REJECT;
         regex.lastIndex = 0;
         return node.nodeValue.trim() && regex.test(node.nodeValue)
           ? NodeFilter.FILTER_ACCEPT
@@ -206,7 +206,9 @@
   function escapeRegExp(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
-})();
+}
+
+highlightContextWord(document.getElementById("card-sentence"));
 
 function playAudio() {
   var root = document.getElementById("word-audio");

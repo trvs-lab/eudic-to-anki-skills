@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from html.parser import HTMLParser
 from pathlib import Path
 
 
@@ -140,6 +141,50 @@ class TrvsLabModelSpecTests(unittest.TestCase):
         self.assertIn('line.indexOf("拆解：") === 0', back)
         self.assertIn('line.indexOf("联想：") === 0', back)
         self.assertIn('node.nodeName === "BR"', back)
+
+    def test_history_is_inside_the_annotation_card_with_a_display_only_label(self) -> None:
+        back = (ASSETS / self.spec["card_templates"][0]["BackPath"]).read_text(
+            encoding="utf-8"
+        )
+
+        class ParentIds(HTMLParser):
+            def __init__(self) -> None:
+                super().__init__()
+                self.stack = []
+                self.parents = {}
+
+            def handle_starttag(self, tag, attrs) -> None:
+                element_id = dict(attrs).get("id")
+                if element_id:
+                    self.parents[element_id] = self.stack[-1] if self.stack else None
+                self.stack.append(element_id)
+
+            def handle_endtag(self, tag) -> None:
+                self.stack.pop()
+
+        markup = ParentIds()
+        markup.feed(back.split("<script>", 1)[0])
+        self.assertEqual(markup.parents["history-row"], "annotation-rail")
+        self.assertEqual(markup.parents["history-contexts"], "history-row")
+        self.assertIn('<span class="note-label">温故</span>', back)
+        self.assertIn("{{#历史语境}}", back)
+        self.assertIn("{{历史语境}}", back)
+        self.assertNotIn("{{温故}}", back)
+
+    def test_front_and_history_share_the_same_highlighter(self) -> None:
+        template = self.spec["card_templates"][0]
+        front = (ASSETS / template["FrontPath"]).read_text(encoding="utf-8")
+        back = (ASSETS / template["BackPath"]).read_text(encoding="utf-8")
+        self.assertEqual(front.count("function highlightContextWord("), 1)
+        self.assertIn(
+            'highlightContextWord(document.getElementById("card-sentence"))', front
+        )
+        self.assertIn("highlightContextWord(history)", back)
+        self.assertLess(
+            back.index("history.appendChild(paragraph)"),
+            back.index("highlightContextWord(history)"),
+        )
+        self.assertNotIn("function highlightContextWord(", back)
 
     def test_card_uses_restrained_emphasis_without_a_headword_underline(self) -> None:
         css = (ASSETS / self.spec["css_path"]).read_text(encoding="utf-8")

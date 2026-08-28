@@ -1,4 +1,4 @@
-/* trvs-style-version: context-anchor-v3 */
+/* trvs-style-version: context-anchor-v4 */
 html,
 body {
   scrollbar-width: none;
@@ -74,16 +74,18 @@ mark { color: inherit; background: transparent; font-weight: 700; text-decoratio
 .answer-primary { font-size: 23px; font-weight: 650; line-height: 1.45; }
 .answer-ipa { margin-top: 8px; color: var(--ipa); font: 19px/1.4 Georgia, serif; }
 .answer-definition { margin-top: 14px; font: 19px/1.55 Georgia, serif; }
-.answer-row { display: grid; grid-template-columns: 86px 1fr; gap: 12px; margin-top: 18px; line-height: 1.55; }
-.answer-label { color: var(--muted); font-size: 13px; letter-spacing: 0.05em; }
 .annotation-rail { position: relative; margin-top: 20px; padding: 17px 16px 17px 18px; border-radius: 0 12px 12px 0; background: var(--note); }
 .annotation-rail::before { position: absolute; inset: 0 auto 0 0; width: 2px; background: var(--rail); content: ""; }
 .note-row { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: 10px; align-items: baseline; font-size: 15px; line-height: 1.55; }
 .note-row + .note-row { margin-top: 11px; }
-.note-row.morphology-start { position: relative; margin-top: 17px; padding-top: 16px; }
-.note-row.morphology-start::before { position: absolute; top: 0; right: 0; left: 70px; height: 1px; background: var(--line); content: ""; }
+.note-row.morphology-start,
+.note-row.history-start { position: relative; margin-top: 17px; padding-top: 16px; }
+.note-row.morphology-start::before,
+.note-row.history-start::before { position: absolute; top: 0; right: 0; left: 70px; height: 1px; background: var(--line); content: ""; }
 .note-label { color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: 0.04em; white-space: nowrap; }
 .note-value { min-width: 0; }
+.history-contexts p { margin: 0; }
+.history-contexts p + p { margin-top: 12px; }
 .term { font-weight: 650; }
 .gloss { color: var(--muted); }
 .derivation-result { color: var(--ink); font-weight: 650; }
@@ -93,7 +95,8 @@ mark { color: inherit; background: transparent; font-weight: 700; text-decoratio
 
 @media (max-width: 480px) {
   .note-row { grid-template-columns: 54px minmax(0, 1fr); gap: 8px; }
-  .note-row.morphology-start::before { left: 62px; }
+  .note-row.morphology-start::before,
+  .note-row.history-start::before { left: 62px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
