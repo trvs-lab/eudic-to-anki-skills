@@ -525,7 +525,7 @@ def fetch_all_words(
     auth_header: str,
     request_controller: RequestController,
 ) -> list[dict[str, Any]]:
-    for first_page in (1, 0):
+    for first_page in (0, 1):
         records: list[dict[str, Any]] = []
         page = first_page
         while True:
@@ -537,8 +537,7 @@ def fetch_all_words(
                 auth_header=auth_header,
                 request_controller=request_controller,
             )
-            if page == first_page and not items and first_page == 1:
-                records = []
+            if page == first_page and not items:
                 break
             if not items:
                 return records

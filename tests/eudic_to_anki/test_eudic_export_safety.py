@@ -519,7 +519,9 @@ class EudicExportSafetyTests(unittest.TestCase):
                 stderr,
             )
 
-    def test_zero_based_pagination_and_json_contract_remain_compatible(self) -> None:
+    def test_one_based_pagination_fallback_and_json_contract_remain_compatible(
+        self,
+    ) -> None:
         clock = FakeClock()
         requested_urls: list[str] = []
 
@@ -530,7 +532,7 @@ class EudicExportSafetyTests(unittest.TestCase):
                 return FakeResponse(
                     {"data": [{"id": "1", "language": "en", "name": "Main"}]}
                 )
-            if "page=1" in url:
+            if "page=0" in url:
                 return FakeResponse({"data": []})
             return FakeResponse(
                 {
@@ -581,8 +583,69 @@ class EudicExportSafetyTests(unittest.TestCase):
                 "Context makes a new word easier to retain.",
             )
             self.assertEqual(len(requested_urls), 3)
-            self.assertIn("page=1", requested_urls[1])
-            self.assertIn("page=0", requested_urls[2])
+            self.assertIn("page=0", requested_urls[1])
+            self.assertIn("page=1", requested_urls[2])
+            self.assertIn(
+                "Request stats: categories=1, word_pages=2, retries=0, total=3",
+                stdout,
+            )
+
+    def test_zero_based_multi_page_export_includes_page_zero(self) -> None:
+        clock = FakeClock()
+        requested_urls: list[str] = []
+
+        def fake_urlopen(request: object, **_: object) -> FakeResponse:
+            url = getattr(request, "full_url")
+            requested_urls.append(url)
+            if "/studylist/category" in url:
+                return FakeResponse(
+                    {"data": [{"id": "1", "language": "en", "name": "Main"}]}
+                )
+            words = (
+                ["page-zero-a", "page-zero-b"]
+                if "page=0" in url
+                else ["page-one-a"]
+                if "page=1" in url
+                else []
+            )
+            return FakeResponse(
+                {
+                    "data": [
+                        {
+                            "word": word,
+                            "add_time": "2026-08-05T10:00:00Z",
+                        }
+                        for word in words
+                    ]
+                }
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            output = tmp_path / "multi-page.csv"
+            result, stdout, stderr = self.run_main(
+                [
+                    "--token",
+                    "test-token",
+                    "--all-categories",
+                    "--page-size",
+                    "2",
+                    "--output",
+                    str(output),
+                ],
+                lock_path=tmp_path / "export.lock",
+                urlopen=fake_urlopen,
+                clock=clock,
+            )
+
+            self.assertEqual(result, 0, stderr)
+            rows = list(csv.DictReader(io.StringIO(output.read_text(encoding="utf-8"))))
+            self.assertEqual(
+                [row["word"] for row in rows],
+                ["page-zero-a", "page-zero-b", "page-one-a"],
+            )
+            self.assertIn("page=0", requested_urls[1])
+            self.assertIn("page=1", requested_urls[2])
             self.assertIn(
                 "Request stats: categories=1, word_pages=2, retries=0, total=3",
                 stdout,
