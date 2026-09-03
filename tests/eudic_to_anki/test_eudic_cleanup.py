@@ -41,6 +41,7 @@ class EudicCleanupTests(unittest.TestCase):
         self.template = json.loads(self.input_path.read_text())[0]
         self.client = MissingModelClient()
         self.requests = []
+        self.verification_words = []
         self.clock = FakeClock()
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
@@ -111,6 +112,14 @@ class EudicCleanupTests(unittest.TestCase):
         return list(cleanup.pending_directory().glob("*.json"))
 
     def accept_delete(self, request: object, **kwargs: object) -> FakeResponse:
+        if request.get_method() == "GET":
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(request.full_url).query)
+            self.assertEqual(
+                urllib.parse.urlsplit(request.full_url).path,
+                "/api/open/v1/studylist/word",
+            )
+            self.verification_words.append(query["word"][0])
+            raise http_error(404, {"message": "word does not exist"})
         self.assertEqual(request.get_method(), "DELETE")
         self.assertEqual(kwargs["timeout"], 30)
         self.assertEqual(
@@ -166,14 +175,21 @@ class EudicCleanupTests(unittest.TestCase):
                     "category_id": "book-1",
                     "words": ["Anchor", "later", "low"],
                 },
+                {
+                    "language": "en",
+                    "category_id": "book-1",
+                    "words": ["Anchor", "later", "low"],
+                },
+                {"language": "en", "category_id": "book-2", "words": ["anchor"]},
                 {"language": "en", "category_id": "book-2", "words": ["anchor"]},
             ],
         )
+        self.assertEqual(self.verification_words, ["Anchor", "later", "low", "anchor"])
         self.assertEqual(len(self.client.notes), 4)
         self.assertNotIn("sync", self.client.actions)
         self.assertIn("deleted=4", stdout)
         self.assertEqual(self.pending_files(), [])
-        self.assertEqual(self.clock.sleeps, [2.4])
+        self.assertEqual(self.clock.sleeps, [2.4] * 7)
 
     def test_reject_sharing_a_delete_target_keeps_that_source_word(self) -> None:
         code, _, stderr = self.run_import(
@@ -249,7 +265,8 @@ class EudicCleanupTests(unittest.TestCase):
         self.client.actions.clear()
         code, _, stderr = self.run_import(notes)
         self.assertEqual(code, 0, stderr)
-        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(self.verification_words, ["anchor"])
         self.assertFalse(
             {"addNote", "updateNote", "forgetCards", "changeDeck"}.intersection(
                 self.client.actions
@@ -271,8 +288,22 @@ class EudicCleanupTests(unittest.TestCase):
             [self.entry(f"word{index}") for index in range(101)]
         )
         self.assertEqual(code, 0, stderr)
-        self.assertEqual([len(body["words"]) for body in self.requests], [100, 1])
+        self.assertEqual(
+            [len(body["words"]) for body in self.requests], [100, 100, 1, 1]
+        )
+        self.assertEqual(
+            self.verification_words, ["word0", "word50", "word99", "word100"]
+        )
         self.assertEqual(self.pending_files(), [])
+
+    def test_fifty_words_use_two_deletes_and_three_sample_queries(self) -> None:
+        code, _, stderr = self.run_import(
+            [self.entry(f"word{index}") for index in range(50)]
+        )
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(self.verification_words, ["word0", "word25", "word49"])
+        self.assertEqual(self.transport.call_count, 5)
 
     def test_preview_ping_and_unflagged_import_never_delete(self) -> None:
         self.assertEqual(self.run_import([self.entry()], extra=("--dry-run",))[0], 0)
@@ -327,7 +358,10 @@ class EudicCleanupTests(unittest.TestCase):
         self,
     ) -> None:
         def partial(request: object, **kwargs: object) -> FakeResponse:
-            if json.loads(request.data)["category_id"] == "book-2":
+            if (
+                request.get_method() == "DELETE"
+                and json.loads(request.data)["category_id"] == "book-2"
+            ):
                 raise http_error(503, {"message": "offline"})
             return self.accept_delete(request, **kwargs)
 
@@ -346,11 +380,17 @@ class EudicCleanupTests(unittest.TestCase):
         )
         self.client.actions.clear()
 
+        resumed_deletes = 0
+
         def resumed(request: object, **kwargs: object) -> FakeResponse:
+            nonlocal resumed_deletes
             if request.get_method() == "GET":
-                self.assertIn("category_id=book-2", request.full_url)
-                self.assertIn("page=0", request.full_url)
-                return FakeResponse({"data": [{"word": "second"}]})
+                if resumed_deletes:
+                    raise http_error(404, {"message": "word does not exist"})
+                return FakeResponse(
+                    {"word": "second", "category_ids": ["book-2"]}
+                )
+            resumed_deletes += 1
             return self.accept_delete(request, **kwargs)
 
         self.transport.side_effect = resumed
@@ -358,7 +398,8 @@ class EudicCleanupTests(unittest.TestCase):
         self.assertEqual(code, 0, stderr)
         self.assertEqual(self.pending_files(), [])
         self.assertEqual(
-            [body["words"] for body in self.requests], [["anchor"], ["second"]]
+            [body["words"] for body in self.requests],
+            [["anchor"], ["anchor"], ["second"], ["second"]],
         )
         self.assertFalse(
             {"addNote", "updateNote", "forgetCards", "changeDeck", "sync"}.intersection(
@@ -376,33 +417,39 @@ class EudicCleanupTests(unittest.TestCase):
 
         def absent(request: object, **_: object) -> FakeResponse:
             self.assertEqual(request.get_method(), "GET")
-            return FakeResponse({"data": []})
+            raise http_error(404, {"message": "word does not exist"})
 
         self.transport.side_effect = absent
         self.assertEqual(self.resume()[0], 0)
         self.assertEqual(self.pending_files(), [])
 
-    def test_resume_probes_page_one_when_page_zero_is_empty(self) -> None:
-        self.transport.side_effect = urllib.error.URLError("offline")
+    def test_resume_after_confirmed_first_pass_runs_only_second_pass(self) -> None:
+        delete_attempts = 0
+
+        def lose_second_response(request: object, **kwargs: object) -> FakeResponse:
+            nonlocal delete_attempts
+            delete_attempts += 1
+            if delete_attempts == 2:
+                raise urllib.error.URLError("offline")
+            return self.accept_delete(request, **kwargs)
+
+        self.transport.side_effect = lose_second_response
         self.assertEqual(self.run_import([self.entry()])[0], 2)
-        pages = []
+        resumed_delete = False
 
-        def one_based(request: object, **kwargs: object) -> FakeResponse:
+        def detached_then_absent(request: object, **kwargs: object) -> FakeResponse:
+            nonlocal resumed_delete
             if request.get_method() == "DELETE":
+                resumed_delete = True
                 return self.accept_delete(request, **kwargs)
-            page = int(
-                urllib.parse.parse_qs(urllib.parse.urlsplit(request.full_url).query)[
-                    "page"
-                ][0]
-            )
-            pages.append(page)
-            return FakeResponse({"data": [{"word": "anchor"}] if page == 1 else []})
+            if resumed_delete:
+                raise http_error(404, {"message": "word does not exist"})
+            return FakeResponse({"word": "anchor", "category_ids": []})
 
-        self.transport.side_effect = one_based
+        self.transport.side_effect = detached_then_absent
         code, _, stderr = self.resume()
         self.assertEqual(code, 0, stderr)
-        self.assertEqual(pages, [0, 1])
-        self.assertEqual(self.requests[0]["words"], ["anchor"])
+        self.assertEqual([body["words"] for body in self.requests], [["anchor"], ["anchor"]])
         self.assertEqual(self.pending_files(), [])
 
     def test_resume_keeps_throttling_across_pending_files(self) -> None:
@@ -413,16 +460,26 @@ class EudicCleanupTests(unittest.TestCase):
         )
         starts = []
 
+        deletes_by_word: dict[str, int] = {}
+
         def present(request: object, **_: object) -> FakeResponse:
             starts.append(self.clock.now)
             if request.get_method() == "GET":
-                return FakeResponse({"data": [{"word": "anchor"}, {"word": "second"}]})
+                word = urllib.parse.parse_qs(
+                    urllib.parse.urlsplit(request.full_url).query
+                )["word"][0]
+                if deletes_by_word.get(word, 0) >= 2:
+                    raise http_error(404, {"message": "word does not exist"})
+                category_id = "book-2" if word == "second" else "book-1"
+                return FakeResponse({"word": word, "category_ids": [category_id]})
+            word = json.loads(request.data)["words"][0]
+            deletes_by_word[word] = deletes_by_word.get(word, 0) + 1
             return FakeResponse({}, 204)
 
         self.transport.side_effect = present
         code, _, stderr = self.resume()
         self.assertEqual(code, 0, stderr)
-        self.assertEqual(len(starts), 4)
+        self.assertEqual(len(starts), 8)
         self.assertTrue(all(b - a >= 2.4 - 1e-9 for a, b in zip(starts, starts[1:])))
         self.assertEqual(self.pending_files(), [])
 
@@ -463,8 +520,42 @@ class EudicCleanupTests(unittest.TestCase):
         self.transport.side_effect = malformed
         code, _, stderr = self.resume()
         self.assertEqual(code, 1)
-        self.assertIn("invalid word list", stderr)
+        self.assertIn("invalid word response", stderr)
         self.assertEqual(len(self.pending_files()), 1)
+
+    def test_sample_still_present_keeps_the_whole_batch_pending(self) -> None:
+        def still_present(request: object, **kwargs: object) -> FakeResponse:
+            if request.get_method() == "GET":
+                return FakeResponse({"word": "anchor", "category_ids": []})
+            return self.accept_delete(request, **kwargs)
+
+        self.transport.side_effect = still_present
+        code, _, stderr = self.run_import([self.entry()])
+        self.assertEqual(code, 2)
+        self.assertIn("sampled word 'anchor' still exists", stderr)
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(len(self.pending_files()), 1)
+
+    def test_sample_query_accepts_not_found_after_rate_limit_retry(self) -> None:
+        verification_attempts = 0
+
+        def rate_limited_once(request: object, **kwargs: object) -> FakeResponse:
+            nonlocal verification_attempts
+            if request.get_method() == "DELETE":
+                return self.accept_delete(request, **kwargs)
+            verification_attempts += 1
+            if verification_attempts == 1:
+                raise http_error(
+                    429, {"message": "rate limit"}, retry_after="0"
+                )
+            raise http_error(404, {"message": "word does not exist"})
+
+        self.transport.side_effect = rate_limited_once
+        code, _, stderr = self.run_import([self.entry()])
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(verification_attempts, 2)
+        self.assertEqual(self.pending_files(), [])
 
     def test_pending_storage_failure_prevents_deletion(self) -> None:
         with mock.patch.object(

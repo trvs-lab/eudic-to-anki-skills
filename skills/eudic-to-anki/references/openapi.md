@@ -40,4 +40,4 @@ python3 scripts/run_with_login_zsh.py python3 scripts/eudic_export.py --list-cat
 
 ## 导入后删除
 
-[官方生词本 API 文档 §1.7](https://my.eudic.net/OpenAPI/doc_api_study) 定义 `DELETE /api/open/v1/studylist/words`，JSON body 为 `language`、`category_id` 和原始 `words` 数组；成功返回 `204`。清理由导入器的 `--cleanup-eudic` 调用，不能直接拿导出文件或命令退出码代替整批本地核验。失败和续办策略见 `modules/import/README.md`。
+[官方生词本 API 文档 §1.7](https://my.eudic.net/OpenAPI/doc_api_study) 定义 `DELETE /api/open/v1/studylist/words`，JSON body 为 `language`、`category_id` 和原始 `words` 数组；成功返回 `204`。欧路当前对相同参数的两次成功调用执行两个删除阶段：先移出来源生词本，再从「全部生词」删除。导入器在两次 `204` 后抽查每批首项、中间项和末项，使用 §1.9 的单词查询接口确认返回 `404`。该行为未在官方文档中说明，因此抽样核验不可省略。清理由导入器的 `--cleanup-eudic` 调用，不能直接拿导出文件或命令退出码代替整批本地核验。失败和续办策略见 `modules/import/README.md`。

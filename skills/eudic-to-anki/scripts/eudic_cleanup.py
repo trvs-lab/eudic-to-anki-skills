@@ -23,6 +23,7 @@ from eudic_export import (
 
 PENDING_DIR_NAME = ".eudic-pending"
 BATCH_SIZE = 100
+VERIFY_SAMPLE_SIZE = 3
 
 
 class CleanupError(RuntimeError):
@@ -160,41 +161,66 @@ def _load(path: Path) -> dict[str, Any]:
     return receipt
 
 
-def _remaining_words(
-    language: str, category_id: str, auth: str, controller: RequestController
-) -> set[str]:
-    """Reconcile an uncertain earlier DELETE; do not compare source freshness."""
-    words: set[str] = set()
-    for page in range(51):
-        response = api_request(
-            "/studylist/words",
-            auth,
-            query={
-                "language": language,
-                "category_id": category_id,
-                "page": page,
-                "page_size": 100,
-            },
-            request_controller=controller,
-            request_kind="word_page",
+def _sample_targets(targets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if len(targets) <= VERIFY_SAMPLE_SIZE:
+        return targets
+    indexes = (0, len(targets) // 2, len(targets) - 1)
+    return [targets[index] for index in indexes]
+
+
+def _word_state(
+    target: dict[str, Any], auth: str, controller: RequestController
+) -> str:
+    """Return the global/source state used to verify or resume a batch."""
+    response = api_request(
+        "/studylist/word",
+        auth,
+        query={"language": target["language"], "word": target["word"]},
+        request_controller=controller,
+        request_kind="verification",
+        allow_not_found=True,
+    )
+    if response is None:
+        return "absent"
+    category_ids = response.get("category_ids") if isinstance(response, dict) else None
+    returned_word = response.get("word") if isinstance(response, dict) else None
+    if (
+        not isinstance(returned_word, str)
+        or normalize_word_key(returned_word) != normalize_word_key(target["word"])
+        or not isinstance(category_ids, list)
+        or any(not isinstance(value, (str, int)) for value in category_ids)
+    ):
+        raise CleanupError(
+            "Cannot verify deletion: Eudic returned an invalid word response."
         )
-        rows = response.get("data") if isinstance(response, dict) else None
-        if not isinstance(rows, list) or any(
-            not isinstance(row, dict)
-            or not isinstance(row.get("word"), str)
-            or not row["word"]
-            for row in rows
-        ):
+    source_id = str(target["category_id"])
+    return (
+        "in_source"
+        if source_id in {str(value) for value in category_ids}
+        else "detached"
+    )
+
+
+def _sample_batch_state(
+    targets: list[dict[str, Any]], auth: str, controller: RequestController
+) -> str:
+    states = {_word_state(target, auth, controller) for target in _sample_targets(targets)}
+    if len(states) != 1:
+        raise CleanupError(
+            "Cannot reconcile deletion: sampled Eudic words have inconsistent states."
+        )
+    return states.pop()
+
+
+def _verify_batch_absent(
+    targets: list[dict[str, Any]], auth: str, controller: RequestController
+) -> None:
+    for target in _sample_targets(targets):
+        if _word_state(target, auth, controller) != "absent":
             raise CleanupError(
-                "Cannot reconcile deletion: Eudic returned an invalid word list."
+                f"Eudic cleanup verification failed: sampled word "
+                f"{target['word']!r} still exists."
             )
-        words.update(row["word"] for row in rows)
-        # Match the exporter's support for servers that start pagination at 1.
-        if page == 0 and not rows:
-            continue
-        if len(rows) < 100:
-            return words
-    raise CleanupError("Cannot reconcile deletion: Eudic pagination limit reached.")
 
 
 def delete_pending(
@@ -219,29 +245,36 @@ def delete_pending(
                 target
             )
         for (language, category_id), targets in groups.items():
-            if reconcile:
-                present = _remaining_words(language, category_id, auth, controller)
-                absent = [target for target in targets if target["word"] not in present]
-                receipt["pending"] = [
-                    target for target in receipt["pending"] if target not in absent
-                ]
-                completed += len(absent)
-                _save(path, receipt)
-                targets = [target for target in targets if target["word"] in present]
             for offset in range(0, len(targets), BATCH_SIZE):
                 batch = targets[offset : offset + BATCH_SIZE]
-                api_request(
-                    "/studylist/words",
-                    auth,
-                    method="DELETE",
-                    body={
-                        "language": language,
-                        "category_id": category_id,
-                        "words": [target["word"] for target in batch],
-                    },
-                    request_controller=controller,
-                    request_kind="delete",
-                )
+                completed_passes = 0
+                if reconcile:
+                    state = _sample_batch_state(batch, auth, controller)
+                    if state == "absent":
+                        receipt["pending"] = [
+                            target
+                            for target in receipt["pending"]
+                            if target not in batch
+                        ]
+                        completed += len(batch)
+                        _save(path, receipt)
+                        continue
+                    completed_passes = 1 if state == "detached" else 0
+                body = {
+                    "language": language,
+                    "category_id": category_id,
+                    "words": [target["word"] for target in batch],
+                }
+                for _ in range(completed_passes, 2):
+                    api_request(
+                        "/studylist/words",
+                        auth,
+                        method="DELETE",
+                        body=body,
+                        request_controller=controller,
+                        request_kind="delete",
+                    )
+                _verify_batch_absent(batch, auth, controller)
                 receipt["pending"] = [
                     target for target in receipt["pending"] if target not in batch
                 ]

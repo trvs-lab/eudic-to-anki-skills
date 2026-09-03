@@ -103,6 +103,7 @@ class RequestStats:
     word_page_requests: int = 0
     retry_requests: int = 0
     delete_requests: int = 0
+    verification_requests: int = 0
 
     @property
     def total_requests(self) -> int:
@@ -111,11 +112,17 @@ class RequestStats:
             + self.word_page_requests
             + self.retry_requests
             + self.delete_requests
+            + self.verification_requests
         )
 
     def summary(self) -> str:
         deletion_stats = (
             f"deletes={self.delete_requests}, " if self.delete_requests else ""
+        )
+        verification_stats = (
+            f"verifications={self.verification_requests}, "
+            if self.verification_requests
+            else ""
         )
         return (
             "Request stats: "
@@ -123,6 +130,7 @@ class RequestStats:
             f"word_pages={self.word_page_requests}, "
             f"retries={self.retry_requests}, "
             f"{deletion_stats}"
+            f"{verification_stats}"
             f"total={self.total_requests}"
         )
 
@@ -141,7 +149,10 @@ class RequestController:
         self.last_started_at: float | None = None
 
     def before_request(
-        self, request_kind: Literal["category", "word_page", "retry", "delete"]
+        self,
+        request_kind: Literal[
+            "category", "word_page", "retry", "delete", "verification"
+        ],
     ) -> None:
         now = self.time_source.monotonic()
         if self.last_started_at is not None:
@@ -157,6 +168,8 @@ class RequestController:
             self.stats.word_page_requests += 1
         elif request_kind == "delete":
             self.stats.delete_requests += 1
+        elif request_kind == "verification":
+            self.stats.verification_requests += 1
         else:
             self.stats.retry_requests += 1
 
@@ -424,8 +437,9 @@ def api_request(
     query: dict[str, Any] | None = None,
     body: dict[str, Any] | None = None,
     request_controller: RequestController,
-    request_kind: Literal["category", "word_page", "delete"],
-) -> dict[str, Any]:
+    request_kind: Literal["category", "word_page", "delete", "verification"],
+    allow_not_found: bool = False,
+) -> dict[str, Any] | None:
     url = f"{BASE_URL}{path}"
     if query:
         query = {k: v for k, v in query.items() if v is not None}
@@ -446,6 +460,8 @@ def api_request(
     try:
         return _perform_http_request(request)
     except HttpResponseError as exc:
+        if allow_not_found and exc.code == 404:
+            return None
         # A lost/failed DELETE response must be reconciled on the next run,
         # never blindly replayed by the exporter's read retry policy.
         if method == "DELETE":
@@ -468,6 +484,8 @@ def api_request(
         try:
             return _perform_http_request(request)
         except HttpResponseError as retry_exc:
+            if allow_not_found and retry_exc.code == 404:
+                return None
             raise ApiError(
                 f"{retry_exc}. The single allowed rate-limit retry failed; export stopped."
             ) from retry_exc
