@@ -24,6 +24,7 @@ from eudic_export import (
 PENDING_DIR_NAME = ".eudic-pending"
 BATCH_SIZE = 100
 VERIFY_SAMPLE_SIZE = 3
+DELETE_PASSES_BY_STATE = {"in_source": 0, "detached": 1, "absent": 2}
 
 
 class CleanupError(RuntimeError):
@@ -204,12 +205,8 @@ def _word_state(
 def _sample_batch_state(
     targets: list[dict[str, Any]], auth: str, controller: RequestController
 ) -> str:
-    states = {_word_state(target, auth, controller) for target in _sample_targets(targets)}
-    if len(states) != 1:
-        raise CleanupError(
-            "Cannot reconcile deletion: sampled Eudic words have inconsistent states."
-        )
-    return states.pop()
+    states = [_word_state(target, auth, controller) for target in _sample_targets(targets)]
+    return min(states, key=DELETE_PASSES_BY_STATE.__getitem__)
 
 
 def _verify_batch_absent(
