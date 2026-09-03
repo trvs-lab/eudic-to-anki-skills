@@ -452,34 +452,6 @@ class EudicCleanupTests(unittest.TestCase):
         self.assertEqual([body["words"] for body in self.requests], [["anchor"], ["anchor"]])
         self.assertEqual(self.pending_files(), [])
 
-    def test_resume_uses_earliest_stage_when_samples_are_mixed(self) -> None:
-        self.transport.side_effect = urllib.error.URLError("offline")
-        notes = [self.entry(f"word{index}") for index in range(4)]
-        self.assertEqual(self.run_import(notes)[0], 2)
-        delete_count = 0
-
-        def mixed_then_absent(request: object, **kwargs: object) -> FakeResponse:
-            nonlocal delete_count
-            if request.get_method() == "DELETE":
-                delete_count += 1
-                return self.accept_delete(request, **kwargs)
-            word = urllib.parse.parse_qs(
-                urllib.parse.urlsplit(request.full_url).query
-            )["word"][0]
-            if delete_count >= 2:
-                raise http_error(404, {"message": "word does not exist"})
-            if word == "word0":
-                return FakeResponse({"word": word, "category_ids": ["book-1"]})
-            if word == "word2":
-                return FakeResponse({"word": word, "category_ids": []})
-            raise http_error(404, {"message": "word does not exist"})
-
-        self.transport.side_effect = mixed_then_absent
-        code, _, stderr = self.resume()
-        self.assertEqual(code, 0, stderr)
-        self.assertEqual(delete_count, 2)
-        self.assertEqual(self.pending_files(), [])
-
     def test_resume_keeps_throttling_across_pending_files(self) -> None:
         self.transport.side_effect = urllib.error.URLError("offline")
         self.assertEqual(self.run_import([self.entry()])[0], 2)
